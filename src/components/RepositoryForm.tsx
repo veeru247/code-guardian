@@ -48,7 +48,8 @@ export const RepositoryForm = () => {
       toast({
         title: "Warning",
         description: "This doesn't appear to be a standard Git repository URL. Make sure it's a valid Git repository.",
-        variant: "warning",
+        // Change "warning" to "default" to fix the type error
+        variant: "default",
       });
     }
     
@@ -131,3 +132,4 @@ export const RepositoryForm = () => {
     </div>
   );
 };
+

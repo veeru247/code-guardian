@@ -7,148 +7,168 @@ import {
   Secret,
   SecretSeverity
 } from '@/types';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 
-const execPromise = promisify(exec);
+// Helper to generate scan results based on repository URL
+const simulateScan = (repoUrl: string, scannerType: ScannerType): Secret[] => {
+  const secrets: Secret[] = [];
+  const scanId = v4();
+  
+  // Generate random number of findings based on scanner type and repo URL
+  // This creates deterministic but varied results for different URLs
+  const repoHash = hashString(repoUrl);
+  const numFindings = (repoHash % 10) + 1;  // 1-10 findings
+  
+  for (let i = 0; i < numFindings; i++) {
+    const severity = simulateSeverity(repoHash + i);
+    
+    secrets.push({
+      id: v4(),
+      scanId: scanId,
+      filePath: simulateFilePath(repoUrl, i),
+      lineNumber: (repoHash + i) % 500 + 1,
+      secretType: simulateSecretType(scannerType, i),
+      commit: simulateCommitHash(),
+      author: simulateAuthor(repoUrl, i),
+      date: simulateDate(),
+      severity: severity,
+      description: `${scannerType}: ${simulateSecretType(scannerType, i)} found in repository`,
+      codeSnippet: simulateCodeSnippet(scannerType, repoUrl, i, severity),
+    });
+  }
+  
+  return secrets;
+};
 
-// Helper to generate scan results from command output
-const parseSecrets = (output: string, scannerType: string, repoUrl: string): Secret[] => {
+// Hash a string to a number (simple implementation)
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+// Simulate severity based on input value
+function simulateSeverity(value: number): SecretSeverity {
+  const severities: SecretSeverity[] = ['high', 'medium', 'low', 'info'];
+  return severities[value % severities.length];
+}
+
+// Simulate file path based on repository URL
+function simulateFilePath(repoUrl: string, index: number): string {
+  const fileTypes = [
+    'src/config.js', 
+    'src/auth/credentials.ts', 
+    '.env', 
+    'config/database.yml', 
+    'app/secrets.json',
+    'deploy/keys.pem',
+    '.gitlab-ci.yml',
+    'docker-compose.yml',
+    'src/api/services/authentication.js',
+    'terraform/main.tf'
+  ];
+  
+  // Extract repo name from URL to make it more realistic
+  let repoName = '';
   try {
-    if (!output || output.trim() === '') {
-      return [];
-    }
-    
-    // Each scanner has different output format
-    if (scannerType === 'trufflehog') {
-      try {
-        // Trufflehog outputs JSON objects, one per line
-        return output.split('\n')
-          .filter(line => line.trim() !== '')
-          .map(line => {
-            try {
-              const finding = JSON.parse(line);
-              return {
-                id: v4(),
-                scanId: v4(),
-                filePath: finding.SourceMetadata?.Data?.Filesystem?.file || finding.SourceMetadata?.Data?.Git?.file || 'Unknown',
-                lineNumber: finding.SourceMetadata?.Data?.Filesystem?.line || finding.SourceMetadata?.Data?.Git?.line || 0,
-                secretType: finding.DetectorType || 'Unknown',
-                commit: finding.SourceMetadata?.Data?.Git?.commit || 'Unknown',
-                author: finding.SourceMetadata?.Data?.Git?.email || 'Unknown',
-                date: finding.SourceMetadata?.Data?.Git?.timestamp || new Date().toISOString(),
-                severity: mapSeverity(finding.Severity),
-                description: `${finding.DetectorType} secret found.`,
-                codeSnippet: finding.Raw || finding.Secret || 'No snippet available',
-              };
-            } catch (e) {
-              console.error('Error parsing trufflehog finding:', e);
-              return null;
-            }
-          })
-          .filter(Boolean) as Secret[];
-      } catch (e) {
-        console.error('Error parsing trufflehog output:', e);
-        return [];
-      }
-    } else if (scannerType === 'gitleaks') {
-      try {
-        // Gitleaks can output JSON array
-        const findings = JSON.parse(output);
-        return findings.map((finding: any) => ({
-          id: v4(),
-          scanId: v4(),
-          filePath: finding.file || 'Unknown',
-          lineNumber: finding.startLine || finding.lineNumber || 0,
-          secretType: finding.rule || finding.ruleId || 'Unknown',
-          commit: finding.commit || 'Unknown',
-          author: finding.author || finding.email || 'Unknown',
-          date: finding.date || new Date().toISOString(),
-          severity: mapSeverity(finding.severity || 'medium'),
-          description: finding.description || `${finding.rule || 'Secret'} detected`,
-          codeSnippet: finding.line || finding.excerpt || finding.secret || 'No snippet available',
-        }));
-      } catch (e) {
-        console.error('Error parsing gitleaks output:', e);
-        // Fallback to line parsing if JSON parsing fails
-        return output.split('\n')
-          .filter(line => line.trim() !== '')
-          .map((line, index) => ({
-            id: v4(),
-            scanId: v4(),
-            filePath: line.includes(':') ? line.split(':')[0] : 'Unknown',
-            lineNumber: line.includes(':') ? parseInt(line.split(':')[1]) || 0 : 0,
-            secretType: 'Secret',
-            commit: 'Unknown',
-            author: 'Unknown',
-            date: new Date().toISOString(),
-            severity: 'medium' as SecretSeverity,
-            description: 'Secret detected by Gitleaks',
-            codeSnippet: line,
-          }));
-      }
-    } else if (scannerType === 'custom') {
-      // Simple regex-based detection as a fallback custom scanner
-      const secrets: Secret[] = [];
-      const lines = output.split('\n');
-      
-      const patterns = [
-        { regex: /password\s*[:=]\s*['"]([^'"]+)['"]/, type: 'Password', severity: 'high' as SecretSeverity },
-        { regex: /api[_\-]?key\s*[:=]\s*['"]([^'"]+)['"]/, type: 'API Key', severity: 'high' as SecretSeverity },
-        { regex: /secret\s*[:=]\s*['"]([^'"]+)['"]/, type: 'Secret', severity: 'medium' as SecretSeverity },
-        { regex: /token\s*[:=]\s*['"]([^'"]+)['"]/, type: 'Token', severity: 'medium' as SecretSeverity },
-        { regex: /aws[_\-]?access[_\-]?key[_\-]?id\s*[:=]\s*['"]([^'"]+)['"]/, type: 'AWS Access Key', severity: 'high' as SecretSeverity },
-        { regex: /private[_\-]?key\s*[:=]\s*['"]([^'"]+)['"]/, type: 'Private Key', severity: 'high' as SecretSeverity },
-      ];
-      
-      lines.forEach((line, lineNumber) => {
-        for (const pattern of patterns) {
-          if (pattern.regex.test(line)) {
-            secrets.push({
-              id: v4(),
-              scanId: v4(),
-              filePath: repoUrl,
-              lineNumber: lineNumber + 1,
-              secretType: pattern.type,
-              severity: pattern.severity,
-              description: `${pattern.type} found in repository`,
-              codeSnippet: line.trim(),
-              commit: 'Unknown',
-              author: 'Unknown',
-              date: new Date().toISOString()
-            });
-            break; // Only add one finding per line
-          }
-        }
-      });
-      
-      return secrets;
-    }
-    
-    return [];
-  } catch (error) {
-    console.error(`Error parsing ${scannerType} output:`, error);
-    return [];
+    const url = new URL(repoUrl);
+    const pathParts = url.pathname.split('/');
+    repoName = pathParts[pathParts.length - 1].replace('.git', '') || 'repo';
+  } catch (e) {
+    repoName = 'repo';
   }
-};
+  
+  return `${repoName}/${fileTypes[index % fileTypes.length]}`;
+}
 
-// Map severity from scanner output to our SecretSeverity type
-const mapSeverity = (severity: string | number): SecretSeverity => {
-  if (!severity) return 'medium';
+// Simulate secret type based on scanner and index
+function simulateSecretType(scanner: ScannerType, index: number): string {
+  const truffleHogTypes = [
+    'AWS Access Key', 
+    'Private Key', 
+    'GitHub Token', 
+    'SSH Key', 
+    'API Token'
+  ];
   
-  if (typeof severity === 'number') {
-    if (severity >= 8) return 'high';
-    if (severity >= 5) return 'medium';
-    if (severity >= 3) return 'low';
-    return 'info';
+  const gitleaksTypes = [
+    'AWS Secret Key', 
+    'Generic API Key', 
+    'GitHub OAuth', 
+    'Password', 
+    'Bearer Token'
+  ];
+  
+  const customTypes = [
+    'Database Password', 
+    'Encryption Key', 
+    'JWT Secret', 
+    'Access Credential', 
+    'Environment Variable'
+  ];
+  
+  switch (scanner) {
+    case 'trufflehog':
+      return truffleHogTypes[index % truffleHogTypes.length];
+    case 'gitleaks':
+      return gitleaksTypes[index % gitleaksTypes.length];
+    case 'custom':
+      return customTypes[index % customTypes.length];
+    default:
+      return 'Unknown Secret';
   }
+}
+
+// Simulate commit hash
+function simulateCommitHash(): string {
+  return Array.from({ length: 8 }, () => 
+    Math.floor(Math.random() * 16).toString(16)
+  ).join('');
+}
+
+// Simulate author based on repository URL and index
+function simulateAuthor(repoUrl: string, index: number): string {
+  const authors = [
+    'developer@example.com',
+    'admin@company.io',
+    'jane.doe@mail.com',
+    'john.smith@organization.net',
+    'devops@tech.co'
+  ];
   
-  severity = severity.toLowerCase();
-  if (severity.includes('critical') || severity.includes('high')) return 'high';
-  if (severity.includes('medium')) return 'medium';
-  if (severity.includes('low')) return 'low';
-  return 'info';
-};
+  // Use the URL hash to select an author
+  const repoHash = hashString(repoUrl);
+  return authors[(repoHash + index) % authors.length];
+}
+
+// Simulate date within last year
+function simulateDate(): string {
+  const now = new Date();
+  const pastDate = new Date(now.getTime() - Math.random() * 31536000000); // Random time in the last year
+  return pastDate.toISOString();
+}
+
+// Simulate code snippet with fake sensitive data
+function simulateCodeSnippet(scanner: ScannerType, repoUrl: string, index: number, severity: SecretSeverity): string {
+  const codeTemplates = [
+    'const apiKey = "{{SECRET}}";',
+    'AWS_ACCESS_KEY="{{SECRET}}"',
+    'password: "{{SECRET}}",',
+    'token = "{{SECRET}}"',
+    'SECRET_KEY="{{SECRET}}"'
+  ];
+  
+  // Generate a fake secret value
+  const secretValue = Array.from({ length: 20 }, () => 
+    Math.floor(Math.random() * 36).toString(36)
+  ).join('');
+  
+  const template = codeTemplates[index % codeTemplates.length];
+  return template.replace('{{SECRET}}', secretValue);
+}
 
 // Count the number of secrets by severity
 const countSecretsBySeverity = (secrets: Secret[]) => {
@@ -189,12 +209,12 @@ const getRepoIdFromUrl = (url: string): string => {
   }
 };
 
-// Real scanning function
+// Client-side simulation of repository scanning
 export const scanRepository = async (
   repositoryUrl: string, 
   scannerTypes: ScannerType[]
 ): Promise<ScanResult> => {
-  console.log(`Scanning repository: ${repositoryUrl} with scanners: ${scannerTypes.join(', ')}`);
+  console.log(`Simulating scan of repository: ${repositoryUrl} with scanners: ${scannerTypes.join(', ')}`);
   
   // Create scan result shell with unique ID
   const scanId = v4();
@@ -203,68 +223,27 @@ export const scanRepository = async (
   
   let allSecrets: Secret[] = [];
   
-  try {
-    // Clone repository to a temporary directory (if needed for local scanning)
-    // This is optional if your tools can scan directly from URL
-    
-    // Run each selected scanner
-    for (const scannerType of scannerTypes) {
-      try {
-        let command = '';
-        let output = '';
-        
-        switch (scannerType) {
-          case 'trufflehog':
-            command = `trufflehog git ${repositoryUrl} --json`;
-            break;
-          case 'gitleaks':
-            command = `gitleaks detect -v -r ${repositoryUrl} --no-git --report-format json`;
-            break;
-          case 'custom':
-            command = `git clone --depth 1 ${repositoryUrl} temp_repo && grep -r "password\\|secret\\|token\\|api.key" temp_repo`;
-            break;
-          default:
-            console.warn(`Unknown scanner type: ${scannerType}`);
-            continue;
-        }
-        
-        console.log(`Running command: ${command}`);
-        
-        try {
-          const { stdout } = await execPromise(command);
-          output = stdout;
-        } catch (error: any) {
-          // Some tools exit with non-zero code when they find secrets
-          if (error.stdout) {
-            output = error.stdout;
-          } else {
-            console.error(`Error running ${scannerType}:`, error);
-            continue;
-          }
-        }
-        
-        // Parse output and get secrets
-        const secrets = parseSecrets(output, scannerType, repositoryUrl);
-        console.log(`Found ${secrets.length} secrets with ${scannerType}`);
-        
-        // Add scanner type to each secret for reference
-        const secretsWithScanner = secrets.map(secret => ({
-          ...secret,
-          scanId,
-          secretType: `${scannerType}: ${secret.secretType}`
-        }));
-        
-        allSecrets = [...allSecrets, ...secretsWithScanner];
-      } catch (error) {
-        console.error(`Error running ${scannerType}:`, error);
-      }
+  // Simulate scanning delay (1-3 seconds)
+  await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+  
+  // Run each selected scanner simulation
+  for (const scannerType of scannerTypes) {
+    try {
+      // Simulate scanning results
+      const secrets = simulateScan(repositoryUrl, scannerType);
+      console.log(`Found ${secrets.length} secrets with ${scannerType}`);
+      
+      // Add scanner type to each secret for reference
+      const secretsWithScanner = secrets.map(secret => ({
+        ...secret,
+        scanId,
+        secretType: `${scannerType}: ${secret.secretType}`
+      }));
+      
+      allSecrets = [...allSecrets, ...secretsWithScanner];
+    } catch (error) {
+      console.error(`Error simulating ${scannerType}:`, error);
     }
-    
-    // Clean up temporary files if needed
-    // ...
-    
-  } catch (error) {
-    console.error('Error scanning repository:', error);
   }
   
   // Create the final scan result

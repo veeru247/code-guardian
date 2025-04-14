@@ -125,7 +125,7 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
     }, 500);
 
     try {
-      // Perform the actual scan
+      // Perform the simulated scan
       const scanResult = await scannerService.scanRepository(repositoryUrl, selectedScannerTypes);
       
       // Ensure we get to 100% in UI before completing
