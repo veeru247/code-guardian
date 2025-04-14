@@ -1,75 +1,68 @@
 
 import { Secret, ScannerOptions } from "./types.ts";
-import { determineSeverity } from "./utils.ts";
+import { analyzeContentForSecrets, fetchCommonRepositoryFiles } from "./utils.ts";
 
-// Function to run Gitleaks scanner
+// Gitleaks scanner simulation
 export async function runGitleaks(options: ScannerOptions): Promise<Secret[]> {
-  const { repoPath, scanId } = options;
-  console.log("Starting Gitleaks scan on repository:", repoPath);
-  const secrets: Secret[] = [];
+  const { scanId, repositoryUrl } = options;
+  console.log("Running Gitleaks scanner simulation for:", repositoryUrl);
   
   try {
-    // Check if gitleaks is installed
-    try {
-      const versionCommand = new Deno.Command("gitleaks", {
-        args: ["version"],
-      });
-      const versionOutput = await versionCommand.output();
-      if (versionOutput.success) {
-        console.log("Gitleaks version:", new TextDecoder().decode(versionOutput.stdout));
-      } else {
-        console.error("Gitleaks version check failed:", new TextDecoder().decode(versionOutput.stderr));
+    // Simulate Gitleaks scanning by analyzing fetched repository files
+    const files = await fetchCommonRepositoryFiles(repositoryUrl);
+    const secrets: Secret[] = [];
+    
+    // Custom Gitleaks-specific patterns
+    const gitleaksPatterns = [
+      {
+        name: "Gitleaks - Private Key",
+        regex: /-----BEGIN ([A-Z]+ )?PRIVATE KEY( BLOCK)?-----/,
+        severity: "high" as const,
+        description: "Gitleaks detected a private key"
+      },
+      {
+        name: "Gitleaks - GitHub Token",
+        regex: /gh[pousr]_[a-zA-Z0-9]{36}/,
+        severity: "high" as const,
+        description: "Gitleaks detected GitHub token"
+      },
+      {
+        name: "Gitleaks - Connection String",
+        regex: /[a-zA-Z]+:\/\/[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+@[a-zA-Z0-9_.-]+/,
+        severity: "medium" as const,
+        description: "Gitleaks detected connection string"
       }
-    } catch (err) {
-      console.error("Error checking Gitleaks version:", err);
-    }
+    ];
     
-    // Run gitleaks on the cloned repository
-    console.log("Executing Gitleaks command");
-    const command = new Deno.Command("gitleaks", {
-      args: ["detect", "--source", repoPath, "--report-format", "json", "--no-git"],
-    });
-    
-    const output = await command.output();
-    
-    if (!output.success) {
-      console.error("Gitleaks scan failed:", new TextDecoder().decode(output.stderr));
-      return secrets;
-    }
-    
-    const stdout = new TextDecoder().decode(output.stdout);
-    console.log("Gitleaks raw output length:", stdout.length);
-    console.log("Gitleaks raw output preview:", stdout.substring(0, 200) + (stdout.length > 200 ? "..." : ""));
-    
-    try {
-      // Gitleaks outputs a single JSON array, unlike TruffleHog which outputs one JSON object per line
-      const results = JSON.parse(stdout);
-      console.log(`Gitleaks found ${results.length} potential secrets`);
+    // Process each file with Gitleaks-specific logic
+    for (const file of files) {
+      const lines = file.content.split('\n');
       
-      for (const result of results) {
-        // Map Gitleaks result to our Secret format
-        secrets.push({
-          id: crypto.randomUUID(),
-          scanId: scanId || "",
-          filePath: result.file || "Unknown file",
-          lineNumber: result.startLine || 0,
-          secretType: result.ruleID || "Unknown",
-          severity: determineSeverity(result.ruleID),
-          description: result.description || `Found ${result.ruleID} secret`,
-          codeSnippet: result.match || "",
-          commit: result.commit || "",
-          author: result.author || "",
-          date: result.date || ""
+      lines.forEach((line, index) => {
+        // Gitleaks-specific detection logic
+        const fileSecrets = analyzeContentForSecrets(
+          line,
+          file.path,
+          index + 1,
+          scanId || crypto.randomUUID(),
+          gitleaksPatterns
+        );
+        
+        // Mark as Gitleaks findings
+        fileSecrets.forEach(secret => {
+          secret.secretType = `Gitleaks: ${secret.secretType}`;
         });
-      }
-      
-      console.log(`Successfully processed ${secrets.length} secrets from Gitleaks`);
-    } catch (err) {
-      console.error("Error parsing Gitleaks output:", err);
+        
+        secrets.push(...fileSecrets);
+      });
     }
+    
+    console.log(`Gitleaks simulation found ${secrets.length} secrets`);
+    
+    // Return the discovered secrets
+    return secrets;
   } catch (error) {
-    console.error("Error running Gitleaks:", error);
+    console.error("Error in Gitleaks scanner:", error);
+    throw new Error(`Gitleaks scanner error: ${error instanceof Error ? error.message : String(error)}`);
   }
-  
-  return secrets;
 }

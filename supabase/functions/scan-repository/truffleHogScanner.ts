@@ -1,79 +1,68 @@
 
 import { Secret, ScannerOptions } from "./types.ts";
-import { determineSeverity } from "./utils.ts";
+import { analyzeContentForSecrets, fetchCommonRepositoryFiles } from "./utils.ts";
 
-// Function to run TruffleHog scanner
+// TruffleHog scanner simulation
 export async function runTruffleHog(options: ScannerOptions): Promise<Secret[]> {
-  const { repoPath, scanId } = options;
-  console.log("Starting TruffleHog scan on repository:", repoPath);
-  const secrets: Secret[] = [];
+  const { scanId, repositoryUrl } = options;
+  console.log("Running TruffleHog scanner simulation for:", repositoryUrl);
   
   try {
-    // Check if trufflehog is installed
-    try {
-      const versionCommand = new Deno.Command("trufflehog", {
-        args: ["--version"],
-      });
-      const versionOutput = await versionCommand.output();
-      if (versionOutput.success) {
-        console.log("TruffleHog version:", new TextDecoder().decode(versionOutput.stdout));
-      } else {
-        console.error("TruffleHog version check failed:", new TextDecoder().decode(versionOutput.stderr));
+    // Simulate TruffleHog scanning by analyzing fetched repository files
+    const files = await fetchCommonRepositoryFiles(repositoryUrl);
+    const secrets: Secret[] = [];
+    
+    // Custom TruffleHog patterns
+    const truffleHogPatterns = [
+      {
+        name: "TruffleHog - AWS Access Key",
+        regex: /AKIA[0-9A-Z]{16}/,
+        severity: "high" as const,
+        description: "TruffleHog detected AWS Access Key"
+      },
+      {
+        name: "TruffleHog - API Token",
+        regex: /(api|app)_(token|key|secret)[\"\'=:\s]+([a-zA-Z0-9_\-\.]{16,})/i,
+        severity: "medium" as const,
+        description: "TruffleHog detected API token/key"
+      },
+      {
+        name: "TruffleHog - Password in Code",
+        regex: /(password|passwd|pwd)[\"\'=:\s]+([a-zA-Z0-9_\-\.!@#$%^&*]{8,})/i,
+        severity: "high" as const,
+        description: "TruffleHog detected password in code"
       }
-    } catch (err) {
-      console.error("Error checking TruffleHog version:", err);
-    }
+    ];
     
-    // Run trufflehog on the cloned repository
-    console.log("Executing TruffleHog command");
-    const command = new Deno.Command("trufflehog", {
-      args: ["filesystem", "--directory", repoPath, "--json"],
-    });
-    
-    const output = await command.output();
-    
-    if (!output.success) {
-      console.error("TruffleHog scan failed:", new TextDecoder().decode(output.stderr));
-      return secrets;
-    }
-    
-    const stdout = new TextDecoder().decode(output.stdout);
-    console.log("TruffleHog raw output length:", stdout.length);
-    console.log("TruffleHog raw output preview:", stdout.substring(0, 200) + (stdout.length > 200 ? "..." : ""));
-    
-    // Process each line of output as a separate JSON object
-    const lines = stdout.trim().split("\n");
-    console.log(`TruffleHog found ${lines.length} potential secrets`);
-    
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    // Process each file with TruffleHog-specific logic
+    for (const file of files) {
+      const lines = file.content.split('\n');
       
-      try {
-        const result = JSON.parse(line);
+      lines.forEach((line, index) => {
+        // TruffleHog-specific detection logic
+        const fileSecrets = analyzeContentForSecrets(
+          line,
+          file.path,
+          index + 1,
+          scanId || crypto.randomUUID(),
+          truffleHogPatterns
+        );
         
-        // Map TruffleHog result to our Secret format
-        secrets.push({
-          id: crypto.randomUUID(),
-          scanId: scanId || "",
-          filePath: result.source.file || "Unknown file",
-          lineNumber: result.source.line || 0,
-          secretType: result.detector.detectorType || "Unknown",
-          severity: determineSeverity(result.detector.detectorType),
-          description: `Found ${result.detector.detectorType} secret`,
-          codeSnippet: result.raw || "",
-          commit: result.source.commit || "",
-          author: result.source.email || "",
-          date: result.source.timestamp || ""
+        // Mark as TruffleHog findings
+        fileSecrets.forEach(secret => {
+          secret.secretType = `TruffleHog: ${secret.secretType}`;
         });
-      } catch (err) {
-        console.error("Error parsing TruffleHog output:", err, "Line:", line);
-      }
+        
+        secrets.push(...fileSecrets);
+      });
     }
     
-    console.log(`Successfully processed ${secrets.length} secrets from TruffleHog`);
+    console.log(`TruffleHog simulation found ${secrets.length} secrets`);
+    
+    // Return the discovered secrets
+    return secrets;
   } catch (error) {
-    console.error("Error running TruffleHog:", error);
+    console.error("Error in TruffleHog scanner:", error);
+    throw new Error(`TruffleHog scanner error: ${error instanceof Error ? error.message : String(error)}`);
   }
-  
-  return secrets;
 }

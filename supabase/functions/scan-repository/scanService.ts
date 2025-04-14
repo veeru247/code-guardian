@@ -1,6 +1,12 @@
 
 import { ScanRequest, Secret } from "./types.ts";
-import { supabase, calculateSummary, cloneRepository, cleanupTempDir } from "./utils.ts";
+import { 
+  supabase, 
+  calculateSummary,
+  analyzeRepository, 
+  cleanupTempDir,
+  extractRepoName
+} from "./utils.ts";
 import { runTruffleHog } from "./truffleHogScanner.ts";
 import { runGitleaks } from "./gitleaksScanner.ts";
 
@@ -13,11 +19,34 @@ export async function performScan(request: ScanRequest): Promise<any> {
   console.log(`Creating scan record with ID: ${scanId} for repository ${repositoryUrl}`);
   
   try {
+    // If no repositoryId is provided, create a new repository record
+    let repoId = repositoryId;
+    if (!repoId) {
+      const repoName = extractRepoName(repositoryUrl);
+      const { data: repoData, error: repoError } = await supabase
+        .from('repositories')
+        .insert([{ 
+          name: repoName,
+          url: repositoryUrl,
+          last_scanned_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+        
+      if (repoError) {
+        console.error("Error creating repository record:", repoError);
+        throw new Error(`Failed to create repository record: ${repoError.message}`);
+      }
+      
+      repoId = repoData.id;
+    }
+    
+    // Create initial scan record
     const { error: initialScanError } = await supabase
       .from('scan_results')
       .insert([{
         id: scanId,
-        repository_id: repositoryId,
+        repository_id: repoId,
         status: 'pending',
         started_at: new Date().toISOString(),
         secrets: [],
@@ -35,12 +64,12 @@ export async function performScan(request: ScanRequest): Promise<any> {
       throw new Error(`Failed to create scan record: ${initialScanError.message}`);
     }
     
-    // Clone the repository
-    let repoPath: string;
+    // Analyze the repository (instead of cloning)
+    let repoAnalysis;
     try {
-      console.log("Cloning repository:", repositoryUrl);
-      repoPath = await cloneRepository(repositoryUrl);
-      console.log("Repository cloned successfully to:", repoPath);
+      console.log("Analyzing repository:", repositoryUrl);
+      repoAnalysis = await analyzeRepository(repositoryUrl);
+      console.log("Repository analysis completed");
       
       // Update scan status to scanning
       await supabase
@@ -48,7 +77,7 @@ export async function performScan(request: ScanRequest): Promise<any> {
         .update({ status: 'scanning' })
         .eq('id', scanId);
     } catch (error) {
-      console.error("Failed to clone repository:", error);
+      console.error("Failed to analyze repository:", error);
       
       // Update scan status to failed
       await supabase
@@ -64,7 +93,11 @@ export async function performScan(request: ScanRequest): Promise<any> {
     
     // Run selected scanners
     const secrets: Secret[] = [];
-    const scannerOptions = { repoPath, scanId };
+    const scannerOptions = { 
+      repoPath: repoAnalysis.path, 
+      scanId,
+      repositoryUrl
+    };
     
     try {
       // Run TruffleHog if selected
@@ -100,8 +133,8 @@ export async function performScan(request: ScanRequest): Promise<any> {
       
       console.log("Scan results updated in database");
       
-      // Clean up - remove temporary directory
-      await cleanupTempDir(repoPath);
+      // Clean up - simulated in this case
+      await cleanupTempDir(repoAnalysis.path);
       
       // Get the updated scan result
       const { data: scanData, error: scanError } = await supabase
@@ -129,8 +162,8 @@ export async function performScan(request: ScanRequest): Promise<any> {
         })
         .eq('id', scanId);
       
-      // Clean up - remove temporary directory
-      await cleanupTempDir(repoPath);
+      // Clean up - simulated in this case
+      await cleanupTempDir(repoAnalysis.path);
       
       throw error;
     }

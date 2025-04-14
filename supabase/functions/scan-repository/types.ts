@@ -42,6 +42,7 @@ export interface ScanRequest {
 export interface ScannerOptions {
   repoPath: string;
   scanId?: string;
+  repositoryUrl: string; // Added to support URL-based operations instead of file system operations
 }
 
 export interface ScanSummary {
@@ -50,4 +51,12 @@ export interface ScanSummary {
   mediumSeverity: number;
   lowSeverity: number;
   infoSeverity: number;
+}
+
+// Mock secret patterns for simulation
+export interface SecretPattern {
+  name: string;
+  regex: RegExp;
+  severity: 'high' | 'medium' | 'low' | 'info';
+  description: string;
 }
