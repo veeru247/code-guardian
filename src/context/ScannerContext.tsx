@@ -7,7 +7,7 @@ import {
   ScannerType, 
   Secret 
 } from '@/types';
-import * as mockDataService from '@/services/mockDataService';
+import * as scannerService from '@/services/scannerService';
 import { toast } from "@/hooks/use-toast";
 
 interface ScannerContextValue {
@@ -39,7 +39,7 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
 
   const loadRepositories = async () => {
     try {
-      const repos = await mockDataService.getRepositories();
+      const repos = await scannerService.getRepositories();
       setRepositories(repos);
     } catch (error) {
       console.error('Failed to load repositories:', error);
@@ -53,7 +53,7 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
 
   const loadScanResults = async (repositoryId?: string) => {
     try {
-      const results = await mockDataService.getScanResults(repositoryId);
+      const results = await scannerService.getScanResults(repositoryId);
       setScanResults(results);
     } catch (error) {
       console.error('Failed to load scan results:', error);
@@ -67,7 +67,7 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
 
   const getScanResult = async (scanId: string) => {
     try {
-      const result = await mockDataService.getScanResult(scanId);
+      const result = await scannerService.getScanResult(scanId);
       if (result) {
         setCurrentScan(result);
       }
@@ -120,13 +120,13 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
     const interval = setInterval(() => {
       setScanProgress(prev => {
         const newProgress = prev + Math.floor(Math.random() * 10);
-        return newProgress >= 100 ? 100 : newProgress;
+        return newProgress >= 95 ? 95 : newProgress;
       });
     }, 500);
 
     try {
-      // Start the scan with the provided repository URL
-      const scanResult = await mockDataService.startScan(repositoryUrl, selectedScannerTypes);
+      // Perform the actual scan
+      const scanResult = await scannerService.scanRepository(repositoryUrl, selectedScannerTypes);
       
       // Ensure we get to 100% in UI before completing
       setTimeout(() => {
@@ -135,17 +135,14 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
         setCurrentScan(scanResult);
         setScanResults(prev => [scanResult, ...prev]);
         
-        // Update repositories list
-        loadRepositories();
-        
         setTimeout(() => {
           setIsScanning(false);
           toast({
             title: "Scan Completed",
-            description: `Found ${scanResult.summary.totalSecrets} secrets in the repository ${scanResult.repositoryId}`,
+            description: `Found ${scanResult.summary.totalSecrets} secrets in the repository`,
           });
         }, 500);
-      }, 3000);
+      }, 1000);
     } catch (error) {
       clearInterval(interval);
       setIsScanning(false);

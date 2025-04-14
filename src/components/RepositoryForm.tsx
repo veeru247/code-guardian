@@ -42,6 +42,16 @@ export const RepositoryForm = () => {
       return;
     }
     
+    // Check if URL is a valid git repository
+    if (!trimmedUrl.endsWith('.git') && !trimmedUrl.includes('github.com') && 
+        !trimmedUrl.includes('gitlab.com') && !trimmedUrl.includes('bitbucket.org')) {
+      toast({
+        title: "Warning",
+        description: "This doesn't appear to be a standard Git repository URL. Make sure it's a valid Git repository.",
+        variant: "warning",
+      });
+    }
+    
     try {
       await startNewScan(trimmedUrl);
     } catch (error) {
@@ -104,6 +114,9 @@ export const RepositoryForm = () => {
               </Button>
             ))}
           </div>
+          <p className="text-xs text-gray-400 mt-1">
+            Note: You must have {scannerTypes.join(', ')} installed on your system for scanning to work.
+          </p>
         </div>
         
         <Button 
