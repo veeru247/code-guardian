@@ -52,6 +52,11 @@ export const scanRepository = async (
       throw new Error('At least one scanner type must be selected');
     }
     
+    // Currently, we only support GitHub repositories
+    if (!repositoryUrl.includes('github.com')) {
+      throw new Error('Currently only GitHub repositories are supported');
+    }
+    
     // Call the Supabase Edge Function to perform the scan
     const { data, error } = await supabase.functions.invoke('scan-repository', {
       body: {
@@ -81,7 +86,15 @@ export const scanRepository = async (
 // Extract repository name from URL for better UX
 const extractRepoName = (url: string): string => {
   try {
-    // Handle various Git URL formats
+    // Parse GitHub URL to extract owner and repo name
+    const regex = /github\.com\/([^\/]+)\/([^\/\.]+)/;
+    const match = url.match(regex);
+    
+    if (match && match.length >= 3) {
+      return match[2];
+    }
+    
+    // Handle various Git URL formats as fallback
     let name = url.split('/').pop() || 'unknown-repo';
     
     // Remove .git extension if present

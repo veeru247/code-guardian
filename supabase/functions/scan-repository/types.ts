@@ -31,7 +31,7 @@ export interface ScanResult {
     lowSeverity: number;
     infoSeverity: number;
   };
-  files?: RepositoryFile[]; // Add files to scan results
+  files?: RepositoryFile[];
 }
 
 export interface ScanRequest {
@@ -41,9 +41,9 @@ export interface ScanRequest {
 }
 
 export interface ScannerOptions {
-  repoPath: string;
-  scanId?: string;
   repositoryUrl: string;
+  scanId?: string;
+  files: RepositoryFile[];
 }
 
 export interface ScanSummary {
@@ -54,7 +54,25 @@ export interface ScanSummary {
   infoSeverity: number;
 }
 
-// Mock secret patterns for simulation
+export interface PatternMatch {
+  match: string;
+  line: number;
+  filePath: string;
+  severity: 'high' | 'medium' | 'low' | 'info';
+  description: string;
+  type: string;
+}
+
+// Repository file interface
+export interface RepositoryFile {
+  path: string;
+  content: string;
+  type: 'file' | 'directory';
+  size?: number;
+  lastModified?: string;
+}
+
+// Secret pattern interface
 export interface SecretPattern {
   name: string;
   regex: RegExp;
@@ -62,11 +80,29 @@ export interface SecretPattern {
   description: string;
 }
 
-// New interface for repository files
-export interface RepositoryFile {
+// Git API response interfaces
+export interface GitHubFileContent {
+  name: string;
   path: string;
-  content: string;
-  type: 'file' | 'directory';
-  size?: number;
-  lastModified?: string;
+  sha: string;
+  size: number;
+  url: string;
+  html_url: string;
+  git_url: string;
+  download_url: string | null;
+  type: string;
+  content?: string;
+  encoding?: string;
+}
+
+export interface GitHubDirectory {
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  url: string;
+  html_url: string;
+  git_url: string;
+  download_url: string | null;
+  type: string;
 }

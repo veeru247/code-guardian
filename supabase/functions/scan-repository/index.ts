@@ -1,6 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, extractRepoName, supabase } from "./utils.ts";
+import { corsHeaders, extractRepoName } from "./utils.ts";
 import { performScan } from "./scanService.ts";
 import { ScanRequest } from "./types.ts";
 
@@ -27,6 +27,14 @@ serve(async (req) => {
     if (!scannerTypes || !Array.isArray(scannerTypes) || scannerTypes.length === 0) {
       return new Response(
         JSON.stringify({ error: "At least one scanner type is required" }),
+        { headers: corsHeaders, status: 400 }
+      );
+    }
+    
+    // Currently, we only support GitHub repositories
+    if (!repositoryUrl.includes('github.com')) {
+      return new Response(
+        JSON.stringify({ error: "Only GitHub repositories are supported at this time" }),
         { headers: corsHeaders, status: 400 }
       );
     }

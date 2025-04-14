@@ -43,20 +43,20 @@ export const RepositoryForm = () => {
       return;
     }
     
-    // Check if URL is a valid git repository
-    if (!trimmedUrl.endsWith('.git') && !trimmedUrl.includes('github.com') && 
-        !trimmedUrl.includes('gitlab.com') && !trimmedUrl.includes('bitbucket.org')) {
+    // Validate for GitHub repositories
+    if (!trimmedUrl.includes('github.com')) {
       toast({
-        title: "Warning",
-        description: "This doesn't appear to be a standard Git repository URL. Make sure it's a valid Git repository URL ending with .git",
-        variant: "default",
+        title: "GitHub Only",
+        description: "Currently only GitHub repositories are supported.",
+        variant: "destructive",
       });
+      return;
     }
     
     // More informative message for the user
     toast({
       title: "Starting Scan",
-      description: "Beginning the scan process with the real scanning tools. This may take a few minutes.",
+      description: "Beginning the scan process. This may take a few minutes depending on repository size.",
     });
     
     try {
@@ -75,14 +75,14 @@ export const RepositoryForm = () => {
     <div className="w-full">
       <div className="mb-6">
         <h2 className="text-2xl font-semibold text-white mb-2">Scan a Git Repository</h2>
-        <p className="text-gray-400">Enter the URL of a Git repository to scan for secrets and sensitive information.</p>
+        <p className="text-gray-400">Enter the URL of a GitHub repository to scan for secrets and sensitive information.</p>
       </div>
       
       <Alert className="mb-4 border-scanner-primary bg-scanner-primary/10">
         <AlertTriangle className="h-4 w-4 text-scanner-primary" />
         <AlertDescription className="text-sm text-gray-300">
-          This application uses Supabase Edge Functions to run actual scanning tools (TruffleHog, Gitleaks) on the server-side.
-          Scans are performed on real repositories and can take several minutes to complete.
+          This application scans GitHub repositories for secrets using the GitHub API and advanced pattern matching.
+          It can take several minutes to complete depending on repository size.
         </AlertDescription>
       </Alert>
       
@@ -95,7 +95,7 @@ export const RepositoryForm = () => {
             <FolderGit className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
             <Input
               id="repositoryUrl"
-              placeholder="https://github.com/username/repository.git"
+              placeholder="https://github.com/username/repository"
               value={repositoryUrl}
               onChange={(e) => setRepositoryUrl(e.target.value)}
               className="pl-10 bg-scanner-dark border-scanner-secondary text-white focus:border-scanner-primary"
@@ -104,7 +104,7 @@ export const RepositoryForm = () => {
             />
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            For best results, use the full Git URL ending with .git (e.g., https://github.com/username/repository.git)
+            Currently only GitHub repositories are supported. Use the full GitHub URL (e.g., https://github.com/username/repository)
           </p>
         </div>
         
