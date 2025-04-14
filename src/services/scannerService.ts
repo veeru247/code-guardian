@@ -41,37 +41,30 @@ export const scanRepository = async (
   console.log(`Scanning repository: ${repositoryUrl} with scanners: ${scannerTypes.join(', ')}`);
   
   try {
-    // Extract repo name for better UX
-    const repoName = extractRepoName(repositoryUrl);
+    // Validate inputs
+    if (!repositoryUrl || !repositoryUrl.trim()) {
+      throw new Error('Repository URL is required');
+    }
     
-    // Create a repository record in the database
-    const { data: repoData, error: repoError } = await supabase
-      .from('repositories')
-      .insert([{ 
-        name: repoName,
-        url: repositoryUrl,
-        last_scanned_at: new Date().toISOString()
-      }])
-      .select()
-      .single();
-      
-    if (repoError) {
-      console.error('Error creating repository record:', repoError);
-      throw new Error(`Failed to create repository record: ${repoError.message}`);
+    if (!scannerTypes || scannerTypes.length === 0) {
+      throw new Error('At least one scanner type must be selected');
     }
     
     // Call the Supabase Edge Function to perform the scan
     const { data, error } = await supabase.functions.invoke('scan-repository', {
       body: {
         repositoryUrl,
-        scannerTypes,
-        repositoryId: repoData.id
+        scannerTypes
       }
     });
     
     if (error) {
       console.error('Error invoking Edge Function:', error);
       throw new Error(`Error calling scan-repository function: ${error.message || 'Unknown error'}`);
+    }
+    
+    if (!data) {
+      throw new Error('No data returned from scan-repository function');
     }
     
     // Transform the data to match ScanResult type
