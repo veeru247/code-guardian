@@ -7,6 +7,32 @@ import {
   Secret
 } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { Json } from '@/integrations/supabase/types';
+
+// Transform data from database format to application format
+const transformDbScanResult = (dbResult: any): ScanResult => {
+  return {
+    id: dbResult.id,
+    repositoryId: dbResult.repository_id,
+    configId: dbResult.config_id || '',
+    status: dbResult.status,
+    startedAt: dbResult.started_at,
+    completedAt: dbResult.completed_at,
+    secrets: (dbResult.secrets as any[] || []).map((s: any) => s as Secret),
+    summary: dbResult.summary as ScanResult['summary'],
+  };
+};
+
+// Transform database repository to application format
+const transformDbRepository = (dbRepo: any): Repository => {
+  return {
+    id: dbRepo.id,
+    name: dbRepo.name,
+    url: dbRepo.url,
+    branch: dbRepo.branch,
+    lastScannedAt: dbRepo.last_scanned_at,
+  };
+};
 
 // Run repository scan using Supabase Edge Function
 export const scanRepository = async (
@@ -28,7 +54,9 @@ export const scanRepository = async (
       throw new Error(error.message);
     }
     
-    return data as ScanResult;
+    // Transform the data to match ScanResult type
+    const scanResult = transformDbScanResult(data);
+    return scanResult;
   } catch (error) {
     console.error('Error scanning repository:', error);
     throw error;
@@ -43,7 +71,9 @@ export const getRepositories = async (): Promise<Repository[]> => {
       .select('*');
       
     if (error) throw error;
-    return (data || []) as Repository[];
+    
+    // Transform the data to match Repository type
+    return (data || []).map(transformDbRepository);
   } catch (error) {
     console.error('Error getting repositories:', error);
     return [];
@@ -64,7 +94,9 @@ export const getScanResults = async (repositoryId?: string): Promise<ScanResult[
     const { data, error } = await query;
     
     if (error) throw error;
-    return (data || []) as ScanResult[];
+    
+    // Transform the data to match ScanResult type
+    return (data || []).map(transformDbScanResult);
   } catch (error) {
     console.error('Error getting scan results:', error);
     return [];
@@ -81,7 +113,9 @@ export const getScanResult = async (scanId: string): Promise<ScanResult | null> 
       .single();
       
     if (error) throw error;
-    return data as ScanResult | null;
+    
+    // Transform the data to match ScanResult type
+    return data ? transformDbScanResult(data) : null;
   } catch (error) {
     console.error('Error getting scan result:', error);
     return null;
