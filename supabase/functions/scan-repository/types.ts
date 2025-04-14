@@ -31,6 +31,7 @@ export interface ScanResult {
     lowSeverity: number;
     infoSeverity: number;
   };
+  files?: RepositoryFile[]; // Add files to scan results
 }
 
 export interface ScanRequest {
@@ -42,7 +43,7 @@ export interface ScanRequest {
 export interface ScannerOptions {
   repoPath: string;
   scanId?: string;
-  repositoryUrl: string; // Added to support URL-based operations instead of file system operations
+  repositoryUrl: string;
 }
 
 export interface ScanSummary {
@@ -59,4 +60,13 @@ export interface SecretPattern {
   regex: RegExp;
   severity: 'high' | 'medium' | 'low' | 'info';
   description: string;
+}
+
+// New interface for repository files
+export interface RepositoryFile {
+  path: string;
+  content: string;
+  type: 'file' | 'directory';
+  size?: number;
+  lastModified?: string;
 }

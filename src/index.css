@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -101,7 +100,7 @@
   }
   
   .scanner-card {
-    @apply bg-scanner-dark border border-scanner-secondary rounded-lg shadow-lg hover:border-scanner-primary transition-all duration-300;
+    @apply bg-scanner-dark border-scanner-secondary text-white hover:border-scanner-primary/50 transition-colors cursor-pointer;
   }
 
   .scanner-badge-high {
@@ -123,4 +122,11 @@
   .scan-line {
     @apply absolute h-px w-full bg-scanner-primary/50 left-0 transform animate-scanning;
   }
+}
+
+/* File browser */
+.code-content {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }

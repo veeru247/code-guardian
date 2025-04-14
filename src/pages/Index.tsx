@@ -4,6 +4,7 @@ import { Header } from '@/components/Header';
 import { RepositoryForm } from '@/components/RepositoryForm';
 import { ScanProgress } from '@/components/ScanProgress';
 import { ScanResults } from '@/components/ScanResults';
+import { RepositoryFiles } from '@/components/RepositoryFiles';
 import { RecentScans } from '@/components/RecentScans';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -25,6 +26,7 @@ const Index = () => {
               <div className="lg:col-span-2">
                 <ScanProgress />
                 <ScanResults />
+                <RepositoryFiles />
                 <RecentScans />
               </div>
             </div>

@@ -127,7 +127,8 @@ export async function performScan(request: ScanRequest): Promise<any> {
           status: 'completed',
           completed_at: new Date().toISOString(),
           secrets: secrets,
-          summary: summary
+          summary: summary,
+          files: repoAnalysis.files // Include repository files in the scan results
         })
         .eq('id', scanId);
       

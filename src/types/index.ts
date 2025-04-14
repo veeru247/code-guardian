@@ -1,4 +1,3 @@
-
 export type Repository = {
   id: string;
   name: string;
@@ -36,6 +35,14 @@ export type Secret = {
   codeSnippet?: string;
 };
 
+export interface RepositoryFile {
+  path: string;
+  content: string;
+  type: 'file' | 'directory';
+  size?: number;
+  lastModified?: string;
+}
+
 export type ScanResult = {
   id: string;
   repositoryId: string;
@@ -51,6 +58,7 @@ export type ScanResult = {
     lowSeverity: number;
     infoSeverity: number;
   };
+  files?: RepositoryFile[];
 };
 
 export type ScanFilter = {

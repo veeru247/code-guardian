@@ -4,7 +4,8 @@ import {
   Repository, 
   ScanResult, 
   ScannerType,
-  Secret
+  Secret,
+  RepositoryFile
 } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -19,6 +20,7 @@ const transformDbScanResult = (dbResult: any): ScanResult => {
     completedAt: dbResult.completed_at,
     secrets: (dbResult.secrets as any[] || []).map((s: any) => s as Secret),
     summary: dbResult.summary as ScanResult['summary'],
+    files: (dbResult.files as any[] || []).map((f: any) => f as RepositoryFile),
   };
 };
 

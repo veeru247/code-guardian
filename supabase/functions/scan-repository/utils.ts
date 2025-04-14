@@ -1,5 +1,5 @@
 
-import { Secret, ScanSummary, SecretPattern } from "./types.ts";
+import { Secret, ScanSummary, SecretPattern, RepositoryFile } from "./types.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Set Supabase credentials for Edge Function
@@ -101,17 +101,20 @@ export function analyzeContentForSecrets(
 }
 
 // Function to simulate repository analysis instead of cloning
-export async function analyzeRepository(repoUrl: string): Promise<{ path: string, success: boolean }> {
+export async function analyzeRepository(repoUrl: string): Promise<{ path: string, success: boolean, files: RepositoryFile[] }> {
   console.log("Simulating repository analysis for:", repoUrl);
   
   try {
     // Simulate a successful analysis operation
-    // In a real-world scenario, we would fetch repository details from the GitHub API
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate processing time
+    
+    // Fetch simulated repository files
+    const files = await fetchRepositoryFiles(repoUrl);
     
     return {
       path: "virtual-repo-path", // This is just a placeholder, not an actual file path
-      success: true
+      success: true,
+      files: files
     };
   } catch (error) {
     console.error("Error simulating repository analysis:", error);
@@ -199,66 +202,243 @@ export function extractRepoName(url: string): string {
   }
 }
 
-// Function to simulate fetching common file contents from a repository
-export async function fetchCommonRepositoryFiles(repoUrl: string): Promise<{ path: string, content: string }[]> {
+// Function to fetch a more comprehensive set of files from a repository
+export async function fetchRepositoryFiles(repoUrl: string): Promise<RepositoryFile[]> {
   // In a real implementation, this would make API calls to GitHub/GitLab/etc.
-  console.log(`Simulating fetching files from repository: ${repoUrl}`);
+  console.log(`Simulating fetching repository structure from: ${repoUrl}`);
 
   // Simulate a delay
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 1500));
   
-  // Create a list of common files that might contain secrets
+  // Create a mock repository structure
   return [
     {
-      path: 'config/database.yml',
-      content: `
-production:
-  adapter: postgresql
-  database: app_production
-  username: app_user
-  password: db_password_123456
-  host: db.example.com
-      `
+      path: '/',
+      content: '',
+      type: 'directory'
     },
     {
-      path: '.env',
-      content: `
+      path: '/src',
+      content: '',
+      type: 'directory'
+    },
+    {
+      path: '/src/config',
+      content: '',
+      type: 'directory'
+    },
+    {
+      path: '/src/utils',
+      content: '',
+      type: 'directory'
+    },
+    {
+      path: '/config',
+      content: '',
+      type: 'directory'
+    },
+    {
+      path: '/tests',
+      content: '',
+      type: 'directory'
+    },
+    {
+      path: '/README.md',
+      content: `# Sample Repository
+This is a sample repository for testing secret scanning tools.
+      
+## Features
+- Configuration files
+- Sample code
+- Test files`,
+      type: 'file',
+      size: 124,
+      lastModified: new Date().toISOString()
+    },
+    {
+      path: '/package.json',
+      content: `{
+  "name": "sample-project",
+  "version": "1.0.0",
+  "description": "A sample project for testing",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "mongoose": "^5.12.3",
+    "dotenv": "^10.0.0"
+  },
+  "devDependencies": {
+    "jest": "^27.0.6"
+  }
+}`,
+      type: 'file',
+      size: 339,
+      lastModified: new Date().toISOString()
+    },
+    {
+      path: '/.env',
+      content: `# Environment Variables
+DATABASE_URL=mongodb://username:password123@mongodb.example.com:27017/mydb
 API_KEY=api_key_12345abcdef
 GITHUB_TOKEN=github_pat_abcdefg123456
 AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-      `
+`,
+      type: 'file',
+      size: 242,
+      lastModified: new Date().toISOString()
     },
     {
-      path: 'src/config.js',
-      content: `
-// Configuration for the application
+      path: '/config/database.yml',
+      content: `# Database Configuration
+development:
+  adapter: postgresql
+  database: app_development
+  username: dev_user
+  password: dev_password_123
+  host: localhost
+
+production:
+  adapter: postgresql
+  database: app_production
+  username: app_user
+  password: production_db_password_456
+  host: db.example.com`,
+      type: 'file',
+      size: 278,
+      lastModified: new Date().toISOString()
+    },
+    {
+      path: '/src/config/settings.js',
+      content: `// Application settings
 const config = {
   apiEndpoint: 'https://api.example.com',
-  secret: 'app_secret_token_123456',
-  token: 'jwt_signing_key_abcdef'
+  apiKey: 'sk_test_abcdef1234567890',
+  secretToken: 'app_secret_token_123456',
+  jwtToken: 'jwt_signing_key_abcdef',
+  stripe: {
+    publicKey: 'pk_test_12345',
+    secretKey: 'sk_test_67890'
+  }
 };
 
-export default config;
-      `
+export default config;`,
+      type: 'file',
+      size: 273,
+      lastModified: new Date().toISOString()
     },
     {
-      path: 'deploy/docker-compose.yml',
-      content: `
-version: '3'
+      path: '/src/utils/auth.js',
+      content: `// Authentication utilities
+function authenticate(username, password) {
+  // TODO: Replace this with actual authentication
+  const validCredentials = username === 'admin' && password === 'admin_password_123';
+  
+  if (validCredentials) {
+    return generateToken(username);
+  }
+  
+  return null;
+}
+
+function generateToken(username) {
+  const secret = 'jwt_secret_key_for_token_generation';
+  // Generate JWT token logic would go here
+  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluIn0.secret';
+}
+
+module.exports = {
+  authenticate,
+  generateToken
+};`,
+      type: 'file',
+      size: 492,
+      lastModified: new Date().toISOString()
+    },
+    {
+      path: '/deploy/docker-compose.yml',
+      content: `version: '3'
 services:
   app:
     image: example-app
     environment:
       - DATABASE_URL=postgres://user:password@db:5432/app
       - SESSION_SECRET=session_secret_key_123456
+      - REDIS_URL=redis://redis:6379
   db:
     image: postgres
     environment:
       - POSTGRES_PASSWORD=strong_db_password_789
-      `
+      - POSTGRES_USER=app_user
+      - POSTGRES_DB=app_database`,
+      type: 'file',
+      size: 347,
+      lastModified: new Date().toISOString()
+    },
+    {
+      path: '/tests/test-data.json',
+      content: `{
+  "testUsers": [
+    {
+      "username": "test_user",
+      "password": "test_password_123",
+      "apiKey": "test_api_key_abc123"
+    },
+    {
+      "username": "admin_test",
+      "password": "admin_test_password",
+      "apiKey": "admin_api_key_xyz789"
+    }
+  ],
+  "testConfig": {
+    "dbConnection": "mongodb://test:test123@localhost:27017/testdb",
+    "apiEndpoint": "https://test-api.example.com"
+  }
+}`,
+      type: 'file',
+      size: 346,
+      lastModified: new Date().toISOString()
+    },
+    {
+      path: '/src/helpers/log.js',
+      content: `// Logging utilities
+function logEvent(event, level = 'info') {
+  console.log(\`[\${level.toUpperCase()}] \${new Date().toISOString()}: \${event}\`);
+}
+
+function logError(error) {
+  console.error(\`[ERROR] \${new Date().toISOString()}: \${error.message}\`);
+  console.error(error.stack);
+}
+
+module.exports = {
+  logEvent,
+  logError
+};`,
+      type: 'file',
+      size: 267,
+      lastModified: new Date().toISOString()
     }
   ];
+}
+
+// Function to simulate fetching common file contents from a repository
+export async function fetchCommonRepositoryFiles(repositoryUrl: string): Promise<RepositoryFile[]> {
+  // In a real implementation, this would make API calls to GitHub/GitLab/etc.
+  console.log(`Simulating fetching files from repository: ${repositoryUrl}`);
+
+  // Simulate a delay
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // Get all files from the repository
+  const allFiles = await fetchRepositoryFiles(repositoryUrl);
+  
+  // Filter to only return actual files (not directories)
+  return allFiles.filter(file => file.type === 'file');
 }
 
 // Helper function to clean up (we don't actually need to clean up in this simulation)
