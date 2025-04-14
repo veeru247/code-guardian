@@ -96,6 +96,78 @@ export const scanRepository = async (
   }
 };
 
+// Scan local files uploaded from user's machine
+export const scanLocalFiles = async (
+  files: File[], 
+  scannerTypes: ScannerType[]
+): Promise<ScanResult> => {
+  console.log(`Scanning ${files.length} local files with scanners: ${scannerTypes.join(', ')}`);
+  
+  try {
+    // Validate inputs
+    if (!files || files.length === 0) {
+      throw new Error('Files are required for scanning');
+    }
+    
+    if (!scannerTypes || scannerTypes.length === 0) {
+      throw new Error('At least one scanner type must be selected');
+    }
+    
+    // Process files for scanning
+    const processedFiles = await Promise.all(files.map(async (file) => {
+      // Read file content
+      const content = await readFileAsText(file);
+      
+      return {
+        name: file.name,
+        content,
+        size: file.size,
+        lastModified: new Date(file.lastModified).toISOString()
+      };
+    }));
+    
+    // Call the Supabase Edge Function to perform the scan on local files
+    const { data, error } = await supabase.functions.invoke('scan-local-files', {
+      body: {
+        files: processedFiles,
+        scannerTypes
+      }
+    });
+    
+    if (error) {
+      console.error('Error invoking Edge Function for local files:', error);
+      throw new Error(`Error scanning local files: ${error.message || 'Unknown error'}`);
+    }
+    
+    if (!data) {
+      throw new Error('No data returned from scan-local-files function');
+    }
+    
+    // Transform the data to match ScanResult type
+    const scanResult = transformDbScanResult(data);
+    
+    // If scan failed, throw an error with the message
+    if (scanResult.status === 'failed' && scanResult.errorMessage) {
+      throw new Error(scanResult.errorMessage);
+    }
+    
+    return scanResult;
+  } catch (error) {
+    console.error('Error scanning local files:', error);
+    throw error;
+  }
+};
+
+// Helper function to read file content as text
+const readFileAsText = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
+    reader.readAsText(file);
+  });
+};
+
 // Extract repository name from URL for better UX
 const extractRepoName = (url: string): string => {
   try {

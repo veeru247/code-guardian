@@ -1,194 +1,306 @@
 
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { AlertTriangle, Github, Upload, Wand2 } from 'lucide-react';
 import { useScanner } from '@/context/ScannerContext';
+import { ScannerType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScannerType } from '@/types';
-import { Check, FolderGit, Play, Shield, AlertTriangle, Github, Lock } from 'lucide-react';
-import { toast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { FileUpload } from '@/components/FileUpload';
+import { toast } from '@/hooks/use-toast';
+
+// Repository validation schema
+const formSchema = z.object({
+  repositoryUrl: z.string().url('Please enter a valid URL'),
+  scanners: z.array(z.string()).min(1, 'Select at least one scanner'),
+});
+
+// Local files validation schema
+const localFilesSchema = z.object({
+  scanners: z.array(z.string()).min(1, 'Select at least one scanner'),
+});
+
+// Scanner options
+const scannerOptions = [
+  {
+    id: 'trufflehog',
+    label: 'TruffleHog',
+    description: 'Searches for high-entropy strings and patterns that typically indicate secrets'
+  },
+  {
+    id: 'gitleaks',
+    label: 'Gitleaks',
+    description: 'Scans for credentials and secrets in Git repos with regex pattern matching'
+  },
+];
 
 export const RepositoryForm = () => {
-  const [repositoryUrl, setRepositoryUrl] = useState('');
-  const { startNewScan, isScanning, scannerTypes, selectedScannerTypes, toggleScannerType } = useScanner();
-
-  const validateGitHubUrl = (url: string): boolean => {
-    // Validation for GitHub repository URLs
-    const githubRegex = /^https?:\/\/github\.com\/[^\/]+\/[^\/]+\/?$/;
-    return githubRegex.test(url);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const trimmedUrl = repositoryUrl.trim();
-    if (!trimmedUrl) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a repository URL",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Basic URL validation
-    let isValidUrl = false;
+  const [activeTab, setActiveTab] = useState<'repository' | 'local'>('repository');
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  
+  const { startScan, startLocalScan, isScanning } = useScanner();
+  
+  // Repository scan form
+  const repoForm = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      repositoryUrl: '',
+      scanners: ['trufflehog', 'gitleaks'],
+    },
+  });
+  
+  // Local files scan form
+  const localForm = useForm<z.infer<typeof localFilesSchema>>({
+    resolver: zodResolver(localFilesSchema),
+    defaultValues: {
+      scanners: ['trufflehog', 'gitleaks'],
+    },
+  });
+  
+  // Handle repository scan submission
+  const onRepoSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      const url = new URL(trimmedUrl);
-      isValidUrl = url.protocol === 'http:' || url.protocol === 'https:';
-    } catch (e) {
-      isValidUrl = false;
-    }
-    
-    if (!isValidUrl) {
-      toast({
-        title: "Invalid URL",
-        description: "Please enter a valid repository URL (http:// or https://)",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Validate for GitHub repositories
-    if (!trimmedUrl.includes('github.com')) {
-      toast({
-        title: "GitHub Only",
-        description: "Currently only GitHub repositories are supported.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // More specific GitHub URL validation
-    if (!validateGitHubUrl(trimmedUrl)) {
-      toast({
-        title: "Invalid GitHub URL",
-        description: "Please enter a valid GitHub repository URL in the format: https://github.com/username/repository",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (selectedScannerTypes.length === 0) {
-      toast({
-        title: "No Scanners Selected",
-        description: "Please select at least one scanner type before starting the scan.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // More informative message for the user
-    toast({
-      title: "Starting Scan",
-      description: "Beginning the scan process. This may take a few minutes depending on repository size.",
-    });
-    
-    try {
-      await startNewScan(trimmedUrl);
+      await startScan(
+        values.repositoryUrl, 
+        values.scanners as ScannerType[]
+      );
     } catch (error) {
-      console.error('Error starting scan:', error);
       toast({
-        title: "Error",
-        description: `Failed to start the scan: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        title: "Scan Failed",
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
         variant: "destructive",
       });
     }
   };
-
+  
+  // Handle local files scan submission
+  const onLocalFilesSubmit = async (values: z.infer<typeof localFilesSchema>) => {
+    try {
+      if (uploadedFiles.length === 0) {
+        toast({
+          title: "No Files Selected",
+          description: "Please upload at least one file to scan",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      await startLocalScan(
+        uploadedFiles, 
+        values.scanners as ScannerType[]
+      );
+    } catch (error) {
+      toast({
+        title: "Scan Failed",
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleFilesSelected = (files: File[]) => {
+    setUploadedFiles(files);
+  };
+  
   return (
-    <div className="w-full">
-      <div className="mb-6">
-        <h2 className="text-2xl font-semibold text-white mb-2">Scan a Git Repository</h2>
-        <p className="text-gray-400">Enter the URL of a GitHub repository to scan for secrets and sensitive information.</p>
-      </div>
-      
-      <Alert className="mb-4 border-scanner-primary bg-scanner-primary/10">
-        <AlertTriangle className="h-4 w-4 text-scanner-primary" />
-        <AlertDescription className="text-sm text-gray-300">
-          This application scans GitHub repositories for secrets using the GitHub API and pattern matching.
-          It can take several minutes to complete depending on repository size.
-        </AlertDescription>
-      </Alert>
-      
-      <Alert className="mb-4 border-yellow-600 bg-yellow-600/10">
-        <Github className="h-4 w-4 text-yellow-500" />
-        <AlertTitle className="text-yellow-500">Repository Access</AlertTitle>
-        <AlertDescription className="text-sm text-gray-300">
-          Only public GitHub repositories can be scanned without authentication. For better results and 
-          to avoid rate limits, consider adding a GitHub token to your edge function.
-        </AlertDescription>
-      </Alert>
-      
-      <Alert className="mb-4 border-scanner-secondary bg-scanner-secondary/10">
-        <Lock className="h-4 w-4 text-scanner-secondary" />
-        <AlertTitle className="text-scanner-secondary">Private Repositories</AlertTitle>
-        <AlertDescription className="text-sm text-gray-300">
-          To scan private repositories, you must add a GitHub token with appropriate permissions
-          to the edge function environment variables. Without this, the scan will fail with an access error.
-        </AlertDescription>
-      </Alert>
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex flex-col">
-          <label htmlFor="repositoryUrl" className="text-sm font-medium mb-2 text-gray-300">
-            Repository URL
-          </label>
-          <div className="flex relative">
-            <FolderGit className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-            <Input
-              id="repositoryUrl"
-              placeholder="https://github.com/username/repository"
-              value={repositoryUrl}
-              onChange={(e) => setRepositoryUrl(e.target.value)}
-              className="pl-10 bg-scanner-dark border-scanner-secondary text-white focus:border-scanner-primary"
-              disabled={isScanning}
-              required
-            />
-          </div>
-          <p className="text-xs text-gray-400 mt-1">
-            Currently only GitHub repositories are supported. Use the full GitHub URL (e.g., https://github.com/username/repository)
-          </p>
-        </div>
-        
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-300">Scanner Tools</label>
-          <div className="flex flex-wrap gap-2">
-            {scannerTypes.map((type) => (
-              <Button
-                key={type}
-                type="button"
-                variant="outline"
-                className={`flex items-center ${
-                  selectedScannerTypes.includes(type) 
-                    ? 'bg-scanner-primary text-white border-scanner-primary' 
-                    : 'bg-scanner-dark text-gray-300 border-scanner-secondary'
-                }`}
-                onClick={() => toggleScannerType(type)}
-                disabled={isScanning}
-              >
-                {selectedScannerTypes.includes(type) && (
-                  <Check className="mr-2 h-4 w-4" />
-                )}
-                <Shield className="mr-2 h-4 w-4" />
-                {type.charAt(0).toUpperCase() + type.slice(1)}
-              </Button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400 mt-1">
-            Select at least one scanner tool. Each tool uses different techniques to identify potential secrets.
-          </p>
-        </div>
-        
-        <Button 
-          type="submit" 
-          className="w-full bg-scanner-primary hover:bg-scanner-secondary text-white"
-          disabled={isScanning || selectedScannerTypes.length === 0}
-        >
-          <Play className="mr-2 h-4 w-4" />
-          {isScanning ? 'Scanning...' : 'Start Scan'}
-        </Button>
-      </form>
+    <div className="space-y-6">
+      <Card className="bg-scanner-dark border-scanner-secondary">
+        <CardHeader>
+          <CardTitle className="text-xl text-white">Scan for Secrets</CardTitle>
+          <CardDescription>
+            Detect secrets, API keys, and credentials in your code
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="repository" className="w-full" onValueChange={(value) => setActiveTab(value as 'repository' | 'local')}>
+            <TabsList className="grid grid-cols-2 mb-4">
+              <TabsTrigger value="repository" className="data-[state=active]:bg-scanner-primary">
+                <Github className="h-4 w-4 mr-2" />
+                Repository
+              </TabsTrigger>
+              <TabsTrigger value="local" className="data-[state=active]:bg-scanner-primary">
+                <Upload className="h-4 w-4 mr-2" />
+                Local Files
+              </TabsTrigger>
+            </TabsList>
+            
+            {/* Repository Tab */}
+            <TabsContent value="repository">
+              <Form {...repoForm}>
+                <form onSubmit={repoForm.handleSubmit(onRepoSubmit)} className="space-y-6">
+                  <FormField
+                    control={repoForm.control}
+                    name="repositoryUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>GitHub Repository URL</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="https://github.com/username/repository" 
+                            {...field}
+                            className="border-scanner-secondary"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Enter a GitHub repository URL to scan
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <div className="space-y-2">
+                    <FormLabel>Scanners</FormLabel>
+                    <div className="grid grid-cols-1 gap-4">
+                      {scannerOptions.map((option) => (
+                        <FormField
+                          key={option.id}
+                          control={repoForm.control}
+                          name="scanners"
+                          render={({ field }) => (
+                            <FormItem
+                              className="flex flex-row items-start space-x-3 space-y-0 p-3 border border-scanner-secondary rounded-md"
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(option.id)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, option.id])
+                                      : field.onChange(field.value?.filter((value) => value !== option.id))
+                                  }}
+                                />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="text-white">
+                                  {option.label}
+                                </FormLabel>
+                                <FormDescription>
+                                  {option.description}
+                                </FormDescription>
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </div>
+                  
+                  <Alert className="bg-scanner-dark border-scanner-warning">
+                    <AlertTriangle className="h-4 w-4 text-scanner-warning" />
+                    <AlertTitle className="text-scanner-warning">Repository Access</AlertTitle>
+                    <AlertDescription className="text-gray-400">
+                      The repository must be public or you must have access to it. Private repositories 
+                      require authentication.
+                    </AlertDescription>
+                  </Alert>
+                  
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-scanner-primary hover:bg-scanner-secondary"
+                    disabled={isScanning}
+                  >
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Start Repository Scan
+                  </Button>
+                </form>
+              </Form>
+            </TabsContent>
+            
+            {/* Local Files Tab */}
+            <TabsContent value="local">
+              <Form {...localForm}>
+                <form onSubmit={localForm.handleSubmit(onLocalFilesSubmit)} className="space-y-6">
+                  <FormField
+                    control={localForm.control}
+                    name="scanners"
+                    render={() => (
+                      <FormItem>
+                        <div className="mb-4">
+                          <FormLabel>Upload Files</FormLabel>
+                          <FormDescription className="mb-2">
+                            Select files from your computer to scan for secrets
+                          </FormDescription>
+                          <FileUpload 
+                            onFilesSelected={handleFilesSelected} 
+                            maxFiles={50}
+                            maxSizeMB={5}
+                          />
+                        </div>
+                        
+                        <Separator className="my-4 bg-scanner-secondary" />
+                        
+                        <div className="space-y-2">
+                          <FormLabel>Scanners</FormLabel>
+                          <div className="grid grid-cols-1 gap-4">
+                            {scannerOptions.map((option) => (
+                              <FormField
+                                key={option.id}
+                                control={localForm.control}
+                                name="scanners"
+                                render={({ field }) => (
+                                  <FormItem
+                                    className="flex flex-row items-start space-x-3 space-y-0 p-3 border border-scanner-secondary rounded-md"
+                                  >
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value?.includes(option.id)}
+                                        onCheckedChange={(checked) => {
+                                          return checked
+                                            ? field.onChange([...field.value, option.id])
+                                            : field.onChange(field.value?.filter((value) => value !== option.id))
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <div className="space-y-1 leading-none">
+                                      <FormLabel className="text-white">
+                                        {option.label}
+                                      </FormLabel>
+                                      <FormDescription>
+                                        {option.description}
+                                      </FormDescription>
+                                    </div>
+                                  </FormItem>
+                                )}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-scanner-primary hover:bg-scanner-secondary"
+                    disabled={isScanning || uploadedFiles.length === 0}
+                  >
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Start Local Files Scan
+                  </Button>
+                </form>
+              </Form>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 };
