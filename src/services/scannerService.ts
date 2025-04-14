@@ -41,8 +41,8 @@ export const scanRepository = async (
   console.log(`Scanning repository: ${repositoryUrl} with scanners: ${scannerTypes.join(', ')}`);
   
   try {
-    // Create repository entry first
-    const repoName = repositoryUrl.split('/').pop()?.replace('.git', '') || 'unknown-repo';
+    // Extract repo name for better UX
+    const repoName = extractRepoName(repositoryUrl);
     
     // Create a repository record in the database
     const { data: repoData, error: repoError } = await supabase
@@ -64,7 +64,8 @@ export const scanRepository = async (
     const { data, error } = await supabase.functions.invoke('scan-repository', {
       body: {
         repositoryUrl,
-        scannerTypes
+        scannerTypes,
+        repositoryId: repoData.id
       }
     });
     
@@ -82,12 +83,32 @@ export const scanRepository = async (
   }
 };
 
+// Extract repository name from URL for better UX
+const extractRepoName = (url: string): string => {
+  try {
+    // Handle various Git URL formats
+    let name = url.split('/').pop() || 'unknown-repo';
+    
+    // Remove .git extension if present
+    name = name.replace(/\.git$/, '');
+    
+    // Handle URLs with query parameters
+    name = name.split('?')[0];
+    
+    return name;
+  } catch (error) {
+    console.error('Error extracting repo name:', error);
+    return 'unknown-repo';
+  }
+};
+
 // Get information about repositories that have been scanned
 export const getRepositories = async (): Promise<Repository[]> => {
   try {
     const { data, error } = await supabase
       .from('repositories')
-      .select('*');
+      .select('*')
+      .order('last_scanned_at', { ascending: false });
       
     if (error) throw error;
     
@@ -104,7 +125,8 @@ export const getScanResults = async (repositoryId?: string): Promise<ScanResult[
   try {
     let query = supabase
       .from('scan_results')
-      .select('*');
+      .select('*')
+      .order('started_at', { ascending: false });
       
     if (repositoryId) {
       query = query.eq('repository_id', repositoryId);
