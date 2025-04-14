@@ -14,11 +14,43 @@ export async function fetchRepositoryContents(repositoryUrl: string): Promise<Re
   
   try {
     const files: RepositoryFile[] = [];
-    await fetchDirectoryContents(repoInfo.owner, repoInfo.repo, '', files);
+    
+    // First check if the repository exists and is accessible
+    const checkUrl = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}`;
+    const headers: HeadersInit = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'CodeGuardian-Scanner'
+    };
+    
+    // Add GitHub token if available (not required for public repos)
+    const githubToken = Deno.env.get("GITHUB_TOKEN");
+    if (githubToken) {
+      headers['Authorization'] = `token ${githubToken}`;
+      console.log("Using GitHub token for authentication");
+    } else {
+      console.log("No GitHub token found, accessing as anonymous user");
+    }
+    
+    // Check repository accessibility
+    const repoCheckResponse = await fetch(checkUrl, { headers });
+    
+    if (!repoCheckResponse.ok) {
+      if (repoCheckResponse.status === 404) {
+        throw new Error(`Repository not found: ${repositoryUrl}. Please check the URL and ensure the repository exists and is accessible.`);
+      } else if (repoCheckResponse.status === 403) {
+        throw new Error(`Access forbidden to repository: ${repositoryUrl}. This could be due to rate limiting or repository visibility restrictions.`);
+      } else {
+        const errorText = await repoCheckResponse.text();
+        throw new Error(`Failed to access repository: ${repoCheckResponse.status} - ${errorText}`);
+      }
+    }
+    
+    // Repository is accessible, proceed with fetching contents
+    await fetchDirectoryContents(repoInfo.owner, repoInfo.repo, '', files, 5, 0, headers);
     console.log(`Fetched ${files.length} files from repository`);
     
     if (files.length === 0) {
-      console.warn("No files were retrieved from the repository. This could indicate access restrictions or an empty repository.");
+      console.warn("No files were retrieved from the repository. This could indicate an empty repository or access restrictions.");
     }
     
     return files;
@@ -34,8 +66,9 @@ async function fetchDirectoryContents(
   repo: string,
   path: string,
   files: RepositoryFile[],
-  maxDepth: number = 3,
-  currentDepth: number = 0
+  maxDepth: number = 5,
+  currentDepth: number = 0,
+  headers: HeadersInit
 ): Promise<void> {
   if (currentDepth > maxDepth) {
     console.log(`Maximum depth reached for path: ${path}`);
@@ -46,17 +79,6 @@ async function fetchDirectoryContents(
     // GitHub API URL for repo contents
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
     console.log(`Fetching: ${url}`);
-    
-    const headers: HeadersInit = {
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'CodeGuardian-Scanner'
-    };
-
-    // Add GitHub token if available (not required for public repos)
-    const githubToken = Deno.env.get("GITHUB_TOKEN");
-    if (githubToken) {
-      headers['Authorization'] = `token ${githubToken}`;
-    }
     
     const response = await fetch(url, { headers });
     
@@ -93,7 +115,7 @@ async function fetchDirectoryContents(
         });
         
         // Recursively fetch contents of this directory
-        await fetchDirectoryContents(owner, repo, item.path, files, maxDepth, currentDepth + 1);
+        await fetchDirectoryContents(owner, repo, item.path, files, maxDepth, currentDepth + 1, headers);
       } else if (item.type === 'file') {
         // Only fetch content for text files under a certain size
         if (shouldFetchFileContent(item)) {

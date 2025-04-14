@@ -39,6 +39,15 @@ serve(async (req) => {
         { headers: corsHeaders, status: 400 }
       );
     }
+    
+    // Validate GitHub URL format
+    const githubRegex = /^https?:\/\/github\.com\/[^\/]+\/[^\/]+\/?$/;
+    if (!githubRegex.test(repositoryUrl)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid GitHub repository URL. Please use format: https://github.com/username/repository" }),
+        { headers: corsHeaders, status: 400 }
+      );
+    }
 
     console.log(`Processing scan for repo: ${repositoryUrl} with scanners: ${scannerTypes.join(', ')}`);
     
@@ -61,7 +70,9 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           error: "Error during scanning", 
-          details: error instanceof Error ? error.message : String(error)
+          details: error instanceof Error ? error.message : String(error),
+          status: "failed",
+          error_message: error instanceof Error ? error.message : String(error)
         }),
         { headers: corsHeaders, status: 500 }
       );
@@ -71,7 +82,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: "Internal Server Error", 
-        details: error instanceof Error ? error.message : String(error) 
+        details: error instanceof Error ? error.message : String(error),
+        status: "failed",
+        error_message: error instanceof Error ? error.message : String(error)
       }),
       { headers: corsHeaders, status: 500 }
     );

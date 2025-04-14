@@ -58,6 +58,12 @@ export const scanRepository = async (
       throw new Error('Currently only GitHub repositories are supported');
     }
     
+    // Validate that it's a valid GitHub repository URL
+    const githubRegex = /^https?:\/\/github\.com\/[^\/]+\/[^\/]+\/?$/;
+    if (!githubRegex.test(repositoryUrl)) {
+      throw new Error('Invalid GitHub repository URL. Please use format: https://github.com/username/repository');
+    }
+    
     // Call the Supabase Edge Function to perform the scan
     const { data, error } = await supabase.functions.invoke('scan-repository', {
       body: {

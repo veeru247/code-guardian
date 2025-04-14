@@ -78,8 +78,22 @@ export async function performScan(request: ScanRequest): Promise<any> {
       
       if (repositoryFiles.length === 0) {
         console.warn("No files were retrieved from the repository. Scan may not find any secrets.");
+        // Still update the scan with empty files rather than failing
+        await supabase
+          .from('scan_results')
+          .update({ 
+            files: [],
+            error_message: "No files were retrieved from the repository. This could be due to an empty repository or access restrictions."
+          })
+          .eq('id', scanId);
       } else {
         console.log(`Successfully fetched ${repositoryFiles.length} files from repository`);
+        
+        // Store the files right away to provide feedback to the user
+        await supabase
+          .from('scan_results')
+          .update({ files: repositoryFiles })
+          .eq('id', scanId);
       }
       
       // Run selected scanners

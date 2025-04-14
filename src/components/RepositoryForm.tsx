@@ -4,7 +4,7 @@ import { useScanner } from '@/context/ScannerContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScannerType } from '@/types';
-import { Check, FolderGit, Play, Shield, AlertTriangle, Github } from 'lucide-react';
+import { Check, FolderGit, Play, Shield, AlertTriangle, Github, Lock } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -13,7 +13,7 @@ export const RepositoryForm = () => {
   const { startNewScan, isScanning, scannerTypes, selectedScannerTypes, toggleScannerType } = useScanner();
 
   const validateGitHubUrl = (url: string): boolean => {
-    // Basic validation for GitHub repository URLs
+    // Validation for GitHub repository URLs
     const githubRegex = /^https?:\/\/github\.com\/[^\/]+\/[^\/]+\/?$/;
     return githubRegex.test(url);
   };
@@ -117,6 +117,15 @@ export const RepositoryForm = () => {
         <AlertDescription className="text-sm text-gray-300">
           Only public GitHub repositories can be scanned without authentication. For better results and 
           to avoid rate limits, consider adding a GitHub token to your edge function.
+        </AlertDescription>
+      </Alert>
+      
+      <Alert className="mb-4 border-scanner-secondary bg-scanner-secondary/10">
+        <Lock className="h-4 w-4 text-scanner-secondary" />
+        <AlertTitle className="text-scanner-secondary">Private Repositories</AlertTitle>
+        <AlertDescription className="text-sm text-gray-300">
+          To scan private repositories, you must add a GitHub token with appropriate permissions
+          to the edge function environment variables. Without this, the scan will fail with an access error.
         </AlertDescription>
       </Alert>
       
