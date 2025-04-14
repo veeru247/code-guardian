@@ -1,7 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders } from "../scan-repository/coreUtils.ts";
-import { calculateSummary } from "../scan-repository/coreUtils.ts";
+import { corsHeaders, calculateSummary } from "./coreUtils.ts";
 import { runTruffleHog } from "../scan-repository/truffleHogScanner.ts";
 import { runGitleaks } from "../scan-repository/gitleaksScanner.ts";
 import { supabase } from "../scan-repository/database.ts";
