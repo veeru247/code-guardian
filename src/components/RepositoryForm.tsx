@@ -14,7 +14,8 @@ export const RepositoryForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!repositoryUrl.trim()) {
+    const trimmedUrl = repositoryUrl.trim();
+    if (!trimmedUrl) {
       toast({
         title: "Validation Error",
         description: "Please enter a repository URL",
@@ -23,10 +24,33 @@ export const RepositoryForm = () => {
       return;
     }
     
+    // Basic URL validation
+    let isValidUrl = false;
     try {
-      await startNewScan(repositoryUrl);
+      const url = new URL(trimmedUrl);
+      isValidUrl = url.protocol === 'http:' || url.protocol === 'https:';
+    } catch (e) {
+      isValidUrl = false;
+    }
+    
+    if (!isValidUrl) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid repository URL (http:// or https://)",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      await startNewScan(trimmedUrl);
     } catch (error) {
       console.error('Error starting scan:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start the scan",
+        variant: "destructive",
+      });
     }
   };
 

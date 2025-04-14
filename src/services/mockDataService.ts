@@ -1,243 +1,282 @@
 
-import { Repository, ScanConfig, ScanResult, Secret, SecretSeverity, ScannerType } from '../types';
-import { v4 as uuidv4 } from '@/lib/utils';
+import { Repository, ScanConfig, ScanResult, ScannerType, Secret, SecretSeverity } from '@/types';
+import { v4 } from '@/lib/utils';
 
-// Mock repository data
-const mockRepositories: Repository[] = [
-  {
-    id: '1',
-    name: 'frontend-app',
-    url: 'https://github.com/company/frontend-app',
-    branch: 'main',
-    lastScannedAt: '2023-04-10T14:30:00Z',
-  },
-  {
-    id: '2',
-    name: 'backend-api',
-    url: 'https://github.com/company/backend-api',
-    branch: 'master',
-    lastScannedAt: '2023-04-12T09:15:00Z',
-  },
-  {
-    id: '3',
-    name: 'data-processor',
-    url: 'https://github.com/company/data-processor',
-    branch: 'develop',
-  },
-];
+// Repositories data store
+const repositories: Repository[] = [];
 
-// Mock scan configurations
-const mockScanConfigs: ScanConfig[] = [
-  {
-    id: '1',
-    repositoryId: '1',
-    scannerType: ['trufflehog', 'gitleaks'],
-    excludePatterns: ['*.md', '*.txt'],
-    maxDepth: 1000,
-    createdAt: '2023-04-10T14:25:00Z',
-  },
-  {
-    id: '2',
-    repositoryId: '2',
-    scannerType: ['trufflehog'],
-    maxDepth: 500,
-    createdAt: '2023-04-12T09:10:00Z',
-  },
-];
+// Scan results data store
+const scanResults: ScanResult[] = [];
 
-// Mock secrets
-const generateMockSecrets = (scanId: string, count: number = 10): Secret[] => {
-  const secretTypes = ['AWS Key', 'GitHub Token', 'API Key', 'Password', 'SSH Key', 'Database Connection String'];
-  const severities: SecretSeverity[] = ['high', 'medium', 'low', 'info'];
-  const filePaths = [
-    'src/config/aws.config.js',
-    'src/services/api.service.ts',
-    '.env',
-    'config/database.yml',
-    'docker-compose.yml',
-    'scripts/deploy.sh',
-    'src/utils/auth.js',
+// Get all repositories
+export const getRepositories = async (): Promise<Repository[]> => {
+  return repositories;
+};
+
+// Get all scan results with optional filter by repository
+export const getScanResults = async (repositoryId?: string): Promise<ScanResult[]> => {
+  if (repositoryId) {
+    return scanResults.filter(result => result.repositoryId === repositoryId);
+  }
+  return scanResults;
+};
+
+// Get a specific scan result by ID
+export const getScanResult = async (scanId: string): Promise<ScanResult | null> => {
+  const result = scanResults.find(scan => scan.id === scanId);
+  return result || null;
+};
+
+// Generate mock secrets based on repository URL and selected scanner types
+const generateMockSecrets = (
+  scanId: string, 
+  repositoryUrl: string, 
+  scannerTypes: ScannerType[]
+): Secret[] => {
+  // Parse repository owner and name from URL
+  let repoOwner = 'unknown';
+  let repoName = 'unknown';
+  
+  try {
+    const urlObj = new URL(repositoryUrl);
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    if (pathParts.length >= 2) {
+      repoOwner = pathParts[pathParts.length - 2];
+      repoName = pathParts[pathParts.length - 1].replace('.git', '');
+    }
+  } catch (e) {
+    console.error('Error parsing repository URL:', e);
+  }
+  
+  // Base secrets that will be shown for any scanner type
+  const baseSecrets: Secret[] = [
+    {
+      id: v4(),
+      scanId,
+      filePath: `${repoName}/config/database.yml`,
+      lineNumber: 15,
+      secretType: 'Database Password',
+      secretValue: 'db_password_123',
+      commit: '1a2b3c4d5e6f7g8h9i0j',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'high',
+      description: `Database password found in ${repoName}/config/database.yml`,
+      codeSnippet: `password: "db_password_123" # DO NOT COMMIT THIS`,
+    },
+    {
+      id: v4(),
+      scanId,
+      filePath: `${repoName}/.env`,
+      lineNumber: 5,
+      secretType: 'API Key',
+      secretValue: 'api_key_123456789',
+      commit: '2b3c4d5e6f7g8h9i0j1k',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'high',
+      description: `API Key found in ${repoName}/.env file`,
+      codeSnippet: `API_KEY="api_key_123456789"`,
+    }
   ];
   
-  const secrets: Secret[] = [];
-  
-  for (let i = 0; i < count; i++) {
-    const severity = severities[Math.floor(Math.random() * severities.length)];
-    const secretType = secretTypes[Math.floor(Math.random() * secretTypes.length)];
-    const filePath = filePaths[Math.floor(Math.random() * filePaths.length)];
-    
-    let codeSnippet = '';
-    switch (secretType) {
-      case 'AWS Key':
-        codeSnippet = `const awsConfig = {
-  accessKeyId: 'AKIA1234567890EXAMPLE',
-  secretAccessKey: '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234'
-};`;
-        break;
-      case 'GitHub Token':
-        codeSnippet = `const token = 'ghp_1234567890abcdefghijklmnopqrstuvwxyz';`;
-        break;
-      case 'API Key':
-        codeSnippet = `axios.defaults.headers.common['Authorization'] = 'Bearer api_1234567890abcdefghijklmnopqrstuvwxyz';`;
-        break;
-      case 'Password':
-        codeSnippet = `const dbConfig = {
-  user: 'admin',
-  password: 'SuperSecretPassword123!'
-};`;
-        break;
-      default:
-        codeSnippet = `// Secret found in this file
-const secret = 'This is a sensitive value';`;
-    }
-    
-    secrets.push({
-      id: uuidv4(),
+  // Trufflehog-specific secrets
+  const trufflehogSecrets: Secret[] = scannerTypes.includes('trufflehog') ? [
+    {
+      id: v4(),
       scanId,
-      filePath,
-      lineNumber: Math.floor(Math.random() * 200) + 1,
-      secretType,
-      severity,
-      author: 'developer@example.com',
-      date: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString(),
-      commit: Math.random().toString(16).slice(2, 10),
-      description: `Found ${secretType} in ${filePath}`,
-      codeSnippet,
-    });
-  }
-  
-  return secrets;
-};
-
-// Mock scan results
-const mockScanResults: ScanResult[] = [
-  {
-    id: '1',
-    repositoryId: '1',
-    configId: '1',
-    status: 'completed',
-    startedAt: '2023-04-10T14:30:00Z',
-    completedAt: '2023-04-10T14:35:00Z',
-    secrets: generateMockSecrets('1', 12),
-    summary: {
-      totalSecrets: 12,
-      highSeverity: 4,
-      mediumSeverity: 5,
-      lowSeverity: 2,
-      infoSeverity: 1,
+      filePath: `${repoName}/src/config.js`,
+      lineNumber: 23,
+      secretType: 'AWS Access Key',
+      secretValue: 'AKIA1234567890ABCDEF',
+      commit: '3c4d5e6f7g8h9i0j1k2l',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'high',
+      description: `AWS Access Key found in ${repoName}/src/config.js`,
+      codeSnippet: `const awsAccessKey = 'AKIA1234567890ABCDEF';`,
     },
-  },
-  {
-    id: '2',
-    repositoryId: '2',
-    configId: '2',
-    status: 'completed',
-    startedAt: '2023-04-12T09:15:00Z',
-    completedAt: '2023-04-12T09:18:00Z',
-    secrets: generateMockSecrets('2', 7),
-    summary: {
-      totalSecrets: 7,
-      highSeverity: 2,
-      mediumSeverity: 3,
-      lowSeverity: 1,
-      infoSeverity: 1,
+    {
+      id: v4(),
+      scanId,
+      filePath: `${repoName}/scripts/deploy.sh`,
+      lineNumber: 8,
+      secretType: 'Private SSH Key',
+      commit: '4d5e6f7g8h9i0j1k2l3m',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'medium',
+      description: `Private SSH Key found in ${repoName}/scripts/deploy.sh`,
+      codeSnippet: `# SSH Key: -----BEGIN RSA PRIVATE KEY----- MIIEpAIBAAKCAQEA1234567890...`,
+    }
+  ] : [];
+  
+  // Gitleaks-specific secrets
+  const gitleaksSecrets: Secret[] = scannerTypes.includes('gitleaks') ? [
+    {
+      id: v4(),
+      scanId,
+      filePath: `${repoName}/tests/fixtures/test_data.json`,
+      lineNumber: 42,
+      secretType: 'GitHub Token',
+      secretValue: 'ghp_1234567890abcdefghijklmnopqrstuvwxyz',
+      commit: '5e6f7g8h9i0j1k2l3m4n',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'high',
+      description: `GitHub Token found in ${repoName}/tests/fixtures/test_data.json`,
+      codeSnippet: `"github_token": "ghp_1234567890abcdefghijklmnopqrstuvwxyz"`,
     },
-  },
-];
-
-// Mock service functions
-export const getRepositories = (): Promise<Repository[]> => {
-  return Promise.resolve([...mockRepositories]);
-};
-
-export const getRepository = (id: string): Promise<Repository | undefined> => {
-  return Promise.resolve(mockRepositories.find(repo => repo.id === id));
-};
-
-export const getScanConfigs = (repositoryId?: string): Promise<ScanConfig[]> => {
-  let configs = [...mockScanConfigs];
-  if (repositoryId) {
-    configs = configs.filter(config => config.repositoryId === repositoryId);
-  }
-  return Promise.resolve(configs);
-};
-
-export const getScanResults = (repositoryId?: string): Promise<ScanResult[]> => {
-  let results = [...mockScanResults];
-  if (repositoryId) {
-    results = results.filter(result => result.repositoryId === repositoryId);
-  }
-  return Promise.resolve(results);
-};
-
-export const getScanResult = (id: string): Promise<ScanResult | undefined> => {
-  return Promise.resolve(mockScanResults.find(result => result.id === id));
-};
-
-export const createRepository = (repository: Omit<Repository, 'id'>): Promise<Repository> => {
-  const newRepository: Repository = {
-    ...repository,
-    id: uuidv4(),
-  };
-  mockRepositories.push(newRepository);
-  return Promise.resolve(newRepository);
-};
-
-export const startScan = async (repositoryUrl: string, scannerTypes: ScannerType[]): Promise<ScanResult> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
+    {
+      id: v4(),
+      scanId,
+      filePath: `${repoName}/docker-compose.yml`,
+      lineNumber: 18,
+      secretType: 'Docker Registry Password',
+      secretValue: 'docker_password_456',
+      commit: '6f7g8h9i0j1k2l3m4n5o',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'medium',
+      description: `Docker Registry Password found in ${repoName}/docker-compose.yml`,
+      codeSnippet: `DOCKER_REGISTRY_PASSWORD: docker_password_456`,
+    }
+  ] : [];
   
-  // Create or find repository
-  let repository: Repository;
-  const existingRepo = mockRepositories.find(r => r.url === repositoryUrl);
+  // Custom scanner secrets
+  const customSecrets: Secret[] = scannerTypes.includes('custom') ? [
+    {
+      id: v4(),
+      scanId,
+      filePath: `${repoName}/app/models/user.rb`,
+      lineNumber: 56,
+      secretType: 'Hardcoded JWT Secret',
+      secretValue: 'jwt_super_secret_key_123',
+      commit: '7g8h9i0j1k2l3m4n5o6p',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'medium',
+      description: `Hardcoded JWT Secret found in ${repoName}/app/models/user.rb`,
+      codeSnippet: `JWT.encode(payload, 'jwt_super_secret_key_123')`,
+    },
+    {
+      id: v4(),
+      scanId,
+      filePath: `${repoName}/config/initializers/secret_token.rb`,
+      lineNumber: 12,
+      secretType: 'Rails Secret Token',
+      secretValue: 'a1b2c3d4e5f6g7h8i9j0',
+      commit: '8h9i0j1k2l3m4n5o6p7q',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'low',
+      description: `Rails Secret Token found in ${repoName}/config/initializers/secret_token.rb`,
+      codeSnippet: `Rails.application.config.secret_token = 'a1b2c3d4e5f6g7h8i9j0'`,
+    },
+    {
+      id: v4(),
+      scanId,
+      filePath: `${repoName}/README.md`,
+      lineNumber: 89,
+      secretType: 'Example Connection String',
+      secretValue: 'mongodb://user:password@example.com:27017/db',
+      commit: '9i0j1k2l3m4n5o6p7q8r',
+      author: `${repoOwner}@example.com`,
+      date: new Date().toISOString(),
+      severity: 'info',
+      description: `Example Connection String found in ${repoName}/README.md`,
+      codeSnippet: '```\nmongodb://user:password@example.com:27017/db\n```',
+    }
+  ] : [];
   
-  if (existingRepo) {
-    repository = existingRepo;
-  } else {
+  // Combine all secrets based on selected scanner types
+  return [...baseSecrets, ...trufflehogSecrets, ...gitleaksSecrets, ...customSecrets];
+};
+
+// Start a new scan
+export const startScan = async (
+  repositoryUrl: string, 
+  scannerTypes: ScannerType[]
+): Promise<ScanResult> => {
+  // Check if repository already exists
+  let repository = repositories.find(repo => repo.url === repositoryUrl);
+  
+  // If not, create a new repository
+  if (!repository) {
     repository = {
-      id: uuidv4(),
-      name: repositoryUrl.split('/').pop() || 'unknown-repo',
+      id: v4(),
+      name: extractRepoName(repositoryUrl),
       url: repositoryUrl,
-      branch: 'main',
+      lastScannedAt: new Date().toISOString(),
     };
-    mockRepositories.push(repository);
+    repositories.push(repository);
+  } else {
+    // Update last scanned time
+    repository.lastScannedAt = new Date().toISOString();
   }
   
-  // Create scan config
+  // Create a new scan configuration
   const scanConfig: ScanConfig = {
-    id: uuidv4(),
+    id: v4(),
     repositoryId: repository.id,
     scannerType: scannerTypes,
     createdAt: new Date().toISOString(),
   };
-  mockScanConfigs.push(scanConfig);
   
-  // Create scan result
-  const scanId = uuidv4();
-  const secrets = generateMockSecrets(scanId, Math.floor(Math.random() * 15) + 5);
+  // Generate scan ID
+  const scanId = v4();
   
-  const highSeverity = secrets.filter(s => s.severity === 'high').length;
-  const mediumSeverity = secrets.filter(s => s.severity === 'medium').length;
-  const lowSeverity = secrets.filter(s => s.severity === 'low').length;
-  const infoSeverity = secrets.filter(s => s.severity === 'info').length;
+  // Generate mock secrets based on repository URL and scanner types
+  const secrets = generateMockSecrets(scanId, repositoryUrl, scannerTypes);
   
+  // Calculate summary counts
+  const summary = calculateSecretsSummary(secrets);
+  
+  // Create new scan result
   const scanResult: ScanResult = {
     id: scanId,
     repositoryId: repository.id,
     configId: scanConfig.id,
     status: 'completed',
     startedAt: new Date().toISOString(),
-    completedAt: new Date(Date.now() + 3000).toISOString(),
+    completedAt: new Date().toISOString(),
     secrets,
-    summary: {
-      totalSecrets: secrets.length,
-      highSeverity,
-      mediumSeverity,
-      lowSeverity,
-      infoSeverity,
-    },
+    summary,
   };
   
-  mockScanResults.push(scanResult);
+  // Add to scan results
+  scanResults.unshift(scanResult);
+  
   return scanResult;
+};
+
+// Helper function to calculate secrets summary
+const calculateSecretsSummary = (secrets: Secret[]) => {
+  return {
+    totalSecrets: secrets.length,
+    highSeverity: secrets.filter(secret => secret.severity === 'high').length,
+    mediumSeverity: secrets.filter(secret => secret.severity === 'medium').length,
+    lowSeverity: secrets.filter(secret => secret.severity === 'low').length,
+    infoSeverity: secrets.filter(secret => secret.severity === 'info').length,
+  };
+};
+
+// Helper function to extract repository name from URL
+const extractRepoName = (url: string): string => {
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    
+    if (pathParts.length >= 2) {
+      return `${pathParts[pathParts.length - 2]}/${pathParts[pathParts.length - 1].replace('.git', '')}`;
+    } else if (pathParts.length === 1) {
+      return pathParts[0].replace('.git', '');
+    }
+    
+    return url;
+  } catch (e) {
+    // If URL parsing fails, extract what looks like a repo name
+    const parts = url.split('/');
+    return parts[parts.length - 1].replace('.git', '') || url;
+  }
 };

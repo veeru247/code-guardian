@@ -101,6 +101,18 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    // Validate URL format
+    try {
+      new URL(repositoryUrl);
+    } catch (e) {
+      toast({
+        title: "Invalid Repository URL",
+        description: "Please enter a valid URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsScanning(true);
     setScanProgress(0);
 
@@ -113,7 +125,7 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
     }, 500);
 
     try {
-      // Simulate network delay
+      // Start the scan with the provided repository URL
       const scanResult = await mockDataService.startScan(repositoryUrl, selectedScannerTypes);
       
       // Ensure we get to 100% in UI before completing
@@ -130,7 +142,7 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
           setIsScanning(false);
           toast({
             title: "Scan Completed",
-            description: `Found ${scanResult.summary.totalSecrets} secrets in the repository`,
+            description: `Found ${scanResult.summary.totalSecrets} secrets in the repository ${scanResult.repositoryId}`,
           });
         }, 500);
       }, 3000);
