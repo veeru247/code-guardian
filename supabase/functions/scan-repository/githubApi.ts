@@ -1,6 +1,7 @@
 
 // GitHub API interaction module
 import { RepositoryFile, GitHubFileContent, GitHubDirectory } from "./types.ts";
+import { corsHeaders, extractOwnerAndRepo } from "./coreUtils.ts";
 
 // Fetch repository contents using GitHub API
 export async function fetchRepositoryContents(repositoryUrl: string): Promise<RepositoryFile[]> {
@@ -15,30 +16,15 @@ export async function fetchRepositoryContents(repositoryUrl: string): Promise<Re
     const files: RepositoryFile[] = [];
     await fetchDirectoryContents(repoInfo.owner, repoInfo.repo, '', files);
     console.log(`Fetched ${files.length} files from repository`);
+    
+    if (files.length === 0) {
+      console.warn("No files were retrieved from the repository. This could indicate access restrictions or an empty repository.");
+    }
+    
     return files;
   } catch (error) {
     console.error('Error fetching repository contents:', error);
-    throw error;
-  }
-}
-
-// Extract owner and repo from GitHub URL (duplicated here to avoid circular imports)
-function extractOwnerAndRepo(url: string): { owner: string; repo: string } | null {
-  try {
-    const regex = /github\.com\/([^\/]+)\/([^\/\.]+)/;
-    const match = url.match(regex);
-    
-    if (match && match.length >= 3) {
-      return {
-        owner: match[1],
-        repo: match[2]
-      };
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Error extracting owner and repo:', error);
-    return null;
+    throw new Error(`Failed to access repository: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -61,12 +47,33 @@ async function fetchDirectoryContents(
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
     console.log(`Fetching: ${url}`);
     
-    const response = await fetch(url);
+    const headers: HeadersInit = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'CodeGuardian-Scanner'
+    };
+
+    // Add GitHub token if available (not required for public repos)
+    const githubToken = Deno.env.get("GITHUB_TOKEN");
+    if (githubToken) {
+      headers['Authorization'] = `token ${githubToken}`;
+    }
+    
+    const response = await fetch(url, { headers });
+    
+    if (response.status === 403 && response.headers.get('X-RateLimit-Remaining') === '0') {
+      console.error('GitHub API rate limit exceeded. Consider adding a GitHub token for higher rate limits.');
+      throw new Error('GitHub API rate limit exceeded. Try again later or use a GitHub token.');
+    }
+    
+    if (response.status === 404) {
+      console.error(`Repository path not found: ${path}`);
+      throw new Error(`Repository path not found: ${path}`);
+    }
     
     if (!response.ok) {
       const error = await response.text();
-      console.error(`GitHub API error: ${response.status} - ${error}`);
-      throw new Error(`GitHub API error: ${response.status}`);
+      console.error(`GitHub API error ${response.status}: ${error}`);
+      throw new Error(`GitHub API error: ${response.status} - ${error}`);
     }
     
     const contents = await response.json();
@@ -90,14 +97,25 @@ async function fetchDirectoryContents(
       } else if (item.type === 'file') {
         // Only fetch content for text files under a certain size
         if (shouldFetchFileContent(item)) {
-          const fileContent = await fetchFileContent(owner, repo, item.path);
-          files.push({
-            path: item.path,
-            content: fileContent,
-            type: 'file',
-            size: item.size,
-            lastModified: new Date().toISOString()
-          });
+          try {
+            const fileContent = await fetchFileContent(owner, repo, item.path, headers);
+            files.push({
+              path: item.path,
+              content: fileContent,
+              type: 'file',
+              size: item.size,
+              lastModified: new Date().toISOString()
+            });
+          } catch (fileError) {
+            console.warn(`Could not fetch content for ${item.path}: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
+            files.push({
+              path: item.path,
+              content: 'Failed to fetch file content',
+              type: 'file',
+              size: item.size,
+              lastModified: new Date().toISOString()
+            });
+          }
         } else {
           // Skip content fetch for binary or large files
           files.push({
@@ -112,7 +130,7 @@ async function fetchDirectoryContents(
     }
   } catch (error) {
     console.error(`Error fetching directory contents for ${path}:`, error);
-    // Don't throw, continue with other directories
+    // Continue with other directories instead of failing completely
   }
 }
 
@@ -139,10 +157,10 @@ function shouldFetchFileContent(file: GitHubFileContent | GitHubDirectory): bool
 }
 
 // Fetch content of a specific file
-async function fetchFileContent(owner: string, repo: string, path: string): Promise<string> {
+async function fetchFileContent(owner: string, repo: string, path: string, headers: HeadersInit): Promise<string> {
   try {
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     
     if (!response.ok) {
       console.error(`Error fetching file content for ${path}: ${response.status}`);

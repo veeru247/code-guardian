@@ -4,13 +4,19 @@ import { useScanner } from '@/context/ScannerContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScannerType } from '@/types';
-import { Check, FolderGit, Play, Shield, AlertTriangle } from 'lucide-react';
+import { Check, FolderGit, Play, Shield, AlertTriangle, Github } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export const RepositoryForm = () => {
   const [repositoryUrl, setRepositoryUrl] = useState('');
   const { startNewScan, isScanning, scannerTypes, selectedScannerTypes, toggleScannerType } = useScanner();
+
+  const validateGitHubUrl = (url: string): boolean => {
+    // Basic validation for GitHub repository URLs
+    const githubRegex = /^https?:\/\/github\.com\/[^\/]+\/[^\/]+\/?$/;
+    return githubRegex.test(url);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +59,25 @@ export const RepositoryForm = () => {
       return;
     }
     
+    // More specific GitHub URL validation
+    if (!validateGitHubUrl(trimmedUrl)) {
+      toast({
+        title: "Invalid GitHub URL",
+        description: "Please enter a valid GitHub repository URL in the format: https://github.com/username/repository",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (selectedScannerTypes.length === 0) {
+      toast({
+        title: "No Scanners Selected",
+        description: "Please select at least one scanner type before starting the scan.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // More informative message for the user
     toast({
       title: "Starting Scan",
@@ -81,8 +106,17 @@ export const RepositoryForm = () => {
       <Alert className="mb-4 border-scanner-primary bg-scanner-primary/10">
         <AlertTriangle className="h-4 w-4 text-scanner-primary" />
         <AlertDescription className="text-sm text-gray-300">
-          This application scans GitHub repositories for secrets using the GitHub API and advanced pattern matching.
+          This application scans GitHub repositories for secrets using the GitHub API and pattern matching.
           It can take several minutes to complete depending on repository size.
+        </AlertDescription>
+      </Alert>
+      
+      <Alert className="mb-4 border-yellow-600 bg-yellow-600/10">
+        <Github className="h-4 w-4 text-yellow-500" />
+        <AlertTitle className="text-yellow-500">Repository Access</AlertTitle>
+        <AlertDescription className="text-sm text-gray-300">
+          Only public GitHub repositories can be scanned without authentication. For better results and 
+          to avoid rate limits, consider adding a GitHub token to your edge function.
         </AlertDescription>
       </Alert>
       

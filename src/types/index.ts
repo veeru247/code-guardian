@@ -60,6 +60,7 @@ export type ScanResult = {
     infoSeverity: number;
   };
   files?: RepositoryFile[];
+  errorMessage?: string | null;
 };
 
 export type ScanFilter = {

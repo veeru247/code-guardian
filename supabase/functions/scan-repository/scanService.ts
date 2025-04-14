@@ -75,7 +75,12 @@ export async function performScan(request: ScanRequest): Promise<any> {
       
       // Fetch repository files using GitHub API
       const repositoryFiles = await fetchRepositoryContents(repositoryUrl);
-      console.log(`Successfully fetched ${repositoryFiles.length} files from repository`);
+      
+      if (repositoryFiles.length === 0) {
+        console.warn("No files were retrieved from the repository. Scan may not find any secrets.");
+      } else {
+        console.log(`Successfully fetched ${repositoryFiles.length} files from repository`);
+      }
       
       // Run selected scanners
       const secrets: Secret[] = [];
@@ -142,7 +147,8 @@ export async function performScan(request: ScanRequest): Promise<any> {
           .from('scan_results')
           .update({ 
             status: 'failed',
-            completed_at: new Date().toISOString()
+            completed_at: new Date().toISOString(),
+            error_message: error instanceof Error ? error.message : String(error)
           })
           .eq('id', scanId);
         
@@ -151,12 +157,13 @@ export async function performScan(request: ScanRequest): Promise<any> {
     } catch (error) {
       console.error("Failed to analyze repository:", error);
       
-      // Update scan status to failed
+      // Update scan status to failed with more specific error message
       await supabase
         .from('scan_results')
         .update({ 
           status: 'failed',
-          completed_at: new Date().toISOString()
+          completed_at: new Date().toISOString(),
+          error_message: error instanceof Error ? error.message : String(error)
         })
         .eq('id', scanId);
       

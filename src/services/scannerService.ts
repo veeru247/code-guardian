@@ -21,6 +21,7 @@ const transformDbScanResult = (dbResult: any): ScanResult => {
     secrets: (dbResult.secrets as any[] || []).map((s: any) => s as Secret),
     summary: dbResult.summary as ScanResult['summary'],
     files: (dbResult.files as any[] || []).map((f: any) => f as RepositoryFile),
+    errorMessage: dbResult.error_message || null
   };
 };
 
@@ -76,6 +77,12 @@ export const scanRepository = async (
     
     // Transform the data to match ScanResult type
     const scanResult = transformDbScanResult(data);
+    
+    // If scan failed, throw an error with the message
+    if (scanResult.status === 'failed' && scanResult.errorMessage) {
+      throw new Error(scanResult.errorMessage);
+    }
+    
     return scanResult;
   } catch (error) {
     console.error('Error scanning repository:', error);
