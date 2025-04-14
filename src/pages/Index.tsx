@@ -1,13 +1,40 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import { ScannerProvider } from '@/context/ScannerContext';
+import { Header } from '@/components/Header';
+import { RepositoryForm } from '@/components/RepositoryForm';
+import { ScanProgress } from '@/components/ScanProgress';
+import { ScanResults } from '@/components/ScanResults';
+import { RecentScans } from '@/components/RecentScans';
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
+    <ScannerProvider>
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        
+        <main className="flex-1 container mx-auto p-4 md:p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left column for form */}
+            <div className="lg:col-span-1">
+              <RepositoryForm />
+            </div>
+            
+            {/* Right column for scan results */}
+            <div className="lg:col-span-2">
+              <ScanProgress />
+              <ScanResults />
+              <RecentScans />
+            </div>
+          </div>
+        </main>
+        
+        <footer className="bg-scanner-dark border-t border-scanner-secondary p-4">
+          <div className="container mx-auto text-center text-sm text-gray-400">
+            <p>Code Guardian - Git Repository Secrets Scanner</p>
+          </div>
+        </footer>
       </div>
-    </div>
+    </ScannerProvider>
   );
 };
 
