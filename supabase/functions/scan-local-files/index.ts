@@ -1,10 +1,10 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, calculateSummary } from "./coreUtils.ts";
-import { runTruffleHog } from "../scan-repository/truffleHogScanner.ts";
-import { runGitleaks } from "../scan-repository/gitleaksScanner.ts";
-import { supabase } from "../scan-repository/database.ts";
-import { RepositoryFile, ScanRequest, Secret } from "../scan-repository/types.ts";
+import { runTruffleHog } from "./truffleHogScanner.ts";
+import { runGitleaks } from "./gitleaksScanner.ts";
+import { supabase } from "./database.ts";
+import { RepositoryFile, ScanRequest, Secret } from "./types.ts";
 
 serve(async (req) => {
   // Handle OPTIONS request for CORS preflight
