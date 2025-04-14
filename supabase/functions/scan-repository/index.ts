@@ -1,6 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, extractRepoName } from "./utils.ts";
+import { corsHeaders } from "./coreUtils.ts";
+import { extractRepoName } from "./coreUtils.ts";
 import { performScan } from "./scanService.ts";
 import { ScanRequest } from "./types.ts";
 

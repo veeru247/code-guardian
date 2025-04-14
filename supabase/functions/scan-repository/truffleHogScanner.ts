@@ -1,6 +1,7 @@
 
 import { Secret, ScannerOptions } from "./types.ts";
-import { scanFileForSecrets, truffleHogPatterns } from "./utils.ts";
+import { scanFileForSecrets } from "./secretPatterns.ts";
+import { truffleHogPatterns } from "./secretPatterns.ts";
 
 // TruffleHog scanner implementation
 export async function runTruffleHog(options: ScannerOptions): Promise<Secret[]> {

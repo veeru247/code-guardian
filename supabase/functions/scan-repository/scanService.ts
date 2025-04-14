@@ -1,11 +1,11 @@
 
 import { ScanRequest, Secret } from "./types.ts";
 import { 
-  supabase, 
   calculateSummary,
-  extractRepoName,
-  fetchRepositoryContents
-} from "./utils.ts";
+  extractRepoName
+} from "./coreUtils.ts";
+import { fetchRepositoryContents } from "./githubApi.ts";
+import { supabase } from "./database.ts";
 import { runTruffleHog } from "./truffleHogScanner.ts";
 import { runGitleaks } from "./gitleaksScanner.ts";
 

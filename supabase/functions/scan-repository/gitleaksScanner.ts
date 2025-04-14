@@ -1,6 +1,7 @@
 
 import { Secret, ScannerOptions } from "./types.ts";
-import { scanFileForSecrets, gitleaksPatterns } from "./utils.ts";
+import { scanFileForSecrets } from "./secretPatterns.ts";
+import { gitleaksPatterns } from "./secretPatterns.ts";
 
 // Gitleaks scanner implementation
 export async function runGitleaks(options: ScannerOptions): Promise<Secret[]> {
