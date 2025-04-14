@@ -1,20 +1,19 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Types
-type ScannerType = 'trufflehog' | 'gitleaks' | 'custom';
-type SecretSeverity = 'high' | 'medium' | 'low' | 'info';
-
+// Type definitions
 interface Secret {
   id: string;
   scanId: string;
   filePath: string;
   lineNumber: number;
   secretType: string;
+  secretValue?: string;
   commit?: string;
   author?: string;
   date?: string;
-  severity: SecretSeverity;
+  severity: 'high' | 'medium' | 'low' | 'info';
   description?: string;
   codeSnippet?: string;
 }
@@ -36,224 +35,188 @@ interface ScanResult {
   };
 }
 
-interface ScanRequest {
-  repositoryUrl: string;
-  scannerTypes: ScannerType[];
+// Mock repository data
+const mockRepositories = [
+  {
+    id: "repo1",
+    name: "Example Repository 1",
+    url: "https://github.com/example/repo1",
+    branch: "main",
+    lastScannedAt: new Date().toISOString()
+  },
+  {
+    id: "repo2",
+    name: "Example Repository 2",
+    url: "https://github.com/example/repo2",
+    branch: "master",
+    lastScannedAt: new Date().toISOString()
+  }
+];
+
+// Mock secret data
+const mockSecrets: Secret[] = [
+  {
+    id: "secret1",
+    scanId: "scan1",
+    filePath: "src/config.js",
+    lineNumber: 15,
+    secretType: "AWS Access Key",
+    commit: "abcdef123456789",
+    author: "Developer A",
+    date: new Date().toISOString(),
+    severity: "high",
+    description: "AWS access key found in source code",
+    codeSnippet: "const awsKey = 'AKIA1234567890EXAMPLE';"
+  },
+  {
+    id: "secret2",
+    scanId: "scan1",
+    filePath: "src/database.js",
+    lineNumber: 27,
+    secretType: "Database Password",
+    commit: "fedcba987654321",
+    author: "Developer B",
+    date: new Date().toISOString(),
+    severity: "medium",
+    description: "Database password found in plain text",
+    codeSnippet: "const dbPassword = 'super_secure_password123';"
+  },
+  {
+    id: "secret3",
+    scanId: "scan1",
+    filePath: ".env",
+    lineNumber: 5,
+    secretType: "API Key",
+    commit: "123abc456def789",
+    author: "Developer C",
+    date: new Date().toISOString(),
+    severity: "medium",
+    description: "Third-party API key found in .env file",
+    codeSnippet: "API_KEY=1234567890abcdef"
+  },
+  {
+    id: "secret4",
+    scanId: "scan1",
+    filePath: "src/utils/auth.js",
+    lineNumber: 42,
+    secretType: "JWT Secret",
+    commit: "789ghi123jkl456",
+    author: "Developer A",
+    date: new Date().toISOString(),
+    severity: "high",
+    description: "JWT secret key hardcoded in auth utility",
+    codeSnippet: "const jwtSecret = 'very_secret_key_do_not_share';"
+  },
+  {
+    id: "secret5",
+    scanId: "scan1",
+    filePath: "config/production.json",
+    lineNumber: 8,
+    secretType: "OAuth Client Secret",
+    commit: "456mno789pqr123",
+    author: "Developer D",
+    date: new Date().toISOString(),
+    severity: "high",
+    description: "OAuth client secret found in config file",
+    codeSnippet: "{ \"clientSecret\": \"oauth_client_secret_value\" }"
+  },
+  {
+    id: "secret6",
+    scanId: "scan1",
+    filePath: "scripts/deploy.sh",
+    lineNumber: 17,
+    secretType: "SSH Private Key",
+    commit: "321stu654vwx987",
+    author: "Developer E",
+    date: new Date().toISOString(),
+    severity: "low",
+    description: "SSH private key path exposed in deploy script",
+    codeSnippet: "ssh -i ~/.ssh/id_rsa user@server.example.com"
+  },
+  {
+    id: "secret7",
+    scanId: "scan1",
+    filePath: "src/services/payment.js",
+    lineNumber: 31,
+    secretType: "Stripe API Key",
+    commit: "654yz987abc321",
+    author: "Developer B",
+    date: new Date().toISOString(),
+    severity: "high",
+    description: "Stripe API key hardcoded in payment service",
+    codeSnippet: "const stripeKey = 'sk_live_1234567890abcdefghijklmn';"
+  },
+  {
+    id: "secret8",
+    scanId: "scan1",
+    filePath: "docker-compose.yml",
+    lineNumber: 12,
+    secretType: "Environment Variable",
+    commit: "987def654ghi321",
+    author: "Developer C",
+    date: new Date().toISOString(),
+    severity: "low",
+    description: "Sensitive environment variable in Docker compose file",
+    codeSnippet: "ADMIN_PASSWORD: admin123"
+  },
+  {
+    id: "secret9",
+    scanId: "scan1",
+    filePath: "src/middleware/logging.js",
+    lineNumber: 7,
+    secretType: "Log API Token",
+    commit: "123jkl456mno789",
+    author: "Developer A",
+    date: new Date().toISOString(),
+    severity: "info",
+    description: "Logging service API token in middleware",
+    codeSnippet: "const logToken = 'log_service_token_123';"
+  },
+  {
+    id: "secret10",
+    scanId: "scan1",
+    filePath: "terraform/main.tf",
+    lineNumber: 23,
+    secretType: "Cloud Credentials",
+    commit: "789pqr123stu456",
+    author: "Developer E",
+    date: new Date().toISOString(),
+    severity: "medium",
+    description: "Cloud provider credentials in Terraform config",
+    codeSnippet: "access_key = \"AKIAIOSFODNN7EXAMPLE\""
+  }
+];
+
+// Mock scan generation function
+function generateMockScan(repositoryId: string, scannerTypes: string[]): ScanResult {
+  // Determine how many secrets to include based on scanner types
+  const secretCount = Math.min(mockSecrets.length, 
+    scannerTypes.includes('trufflehog') ? 7 : 
+    scannerTypes.includes('gitleaks') ? 5 : 3);
+  
+  // Get a subset of mock secrets
+  const secrets = mockSecrets.slice(0, secretCount).map(secret => ({
+    ...secret,
+    id: crypto.randomUUID(),
+  }));
+  
+  // Calculate summary statistics
+  const summary = calculateSummary(secrets);
+  
+  return {
+    id: crypto.randomUUID(),
+    repositoryId,
+    configId: crypto.randomUUID(),
+    status: 'completed',
+    startedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    secrets,
+    summary
+  };
 }
 
-// Helper function to generate a random ID
-function generateId(): string {
-  return crypto.randomUUID();
-}
-
-// Helper to run shell commands
-async function runCommand(cmd: string[]): Promise<string> {
-  const command = new Deno.Command(cmd[0], {
-    args: cmd.slice(1),
-    stdout: "piped",
-    stderr: "piped",
-  });
-  
-  const { stdout, stderr } = await command.output();
-  
-  if (stderr.length > 0) {
-    console.error(new TextDecoder().decode(stderr));
-  }
-  
-  return new TextDecoder().decode(stdout);
-}
-
-// Clone repository to a temporary directory
-async function cloneRepo(repoUrl: string): Promise<string> {
-  const tempDir = await Deno.makeTempDir();
-  try {
-    await runCommand(["git", "clone", "--depth", "1", repoUrl, tempDir]);
-    return tempDir;
-  } catch (error) {
-    console.error(`Error cloning repository: ${error}`);
-    throw new Error(`Failed to clone repository: ${error.message}`);
-  }
-}
-
-// Execute trufflehog scan
-async function runTrufflehog(repoPath: string, scanId: string): Promise<Secret[]> {
-  try {
-    // Check if trufflehog is available
-    try {
-      await runCommand(["trufflehog", "--version"]);
-    } catch (error) {
-      console.error("Trufflehog not installed or not in PATH");
-      return [];
-    }
-    
-    // Run trufflehog with JSON output
-    const output = await runCommand([
-      "trufflehog", 
-      "filesystem", 
-      "--directory", 
-      repoPath,
-      "--json"
-    ]);
-    
-    // Parse results
-    const secrets: Secret[] = [];
-    const lines = output.trim().split("\n");
-    
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      
-      try {
-        const result = JSON.parse(line);
-        const severity = determineSeverity(result.DetectorType);
-        
-        secrets.push({
-          id: generateId(),
-          scanId,
-          filePath: result.SourceMetadata.Data.Filesystem.file || "Unknown",
-          lineNumber: result.SourceMetadata.Data.Filesystem.Line || 0,
-          secretType: `trufflehog: ${result.DetectorType}`,
-          severity,
-          description: `TruffleHog found a ${result.DetectorType} in repository`,
-          codeSnippet: result.Raw || "Code snippet not available"
-        });
-      } catch (error) {
-        console.error(`Error parsing trufflehog result: ${error}`);
-      }
-    }
-    
-    return secrets;
-  } catch (error) {
-    console.error(`Error running trufflehog: ${error}`);
-    return [];
-  }
-}
-
-// Execute gitleaks scan
-async function runGitleaks(repoPath: string, scanId: string): Promise<Secret[]> {
-  try {
-    // Check if gitleaks is available
-    try {
-      await runCommand(["gitleaks", "version"]);
-    } catch (error) {
-      console.error("Gitleaks not installed or not in PATH");
-      return [];
-    }
-    
-    // Run gitleaks with JSON output
-    const output = await runCommand([
-      "gitleaks", 
-      "detect", 
-      "--source", 
-      repoPath,
-      "--report-format", 
-      "json"
-    ]);
-    
-    // Parse results
-    const secrets: Secret[] = [];
-    
-    if (output.trim()) {
-      try {
-        const results = JSON.parse(output);
-        
-        for (const result of results) {
-          const severity = determineSeverity(result.RuleID);
-          
-          secrets.push({
-            id: generateId(),
-            scanId,
-            filePath: result.File || "Unknown",
-            lineNumber: result.StartLine || 0,
-            secretType: `gitleaks: ${result.RuleID}`,
-            commit: result.Commit || undefined,
-            author: result.Author || undefined,
-            date: result.Date || undefined,
-            severity,
-            description: result.Description || `Gitleaks found a ${result.RuleID} in repository`,
-            codeSnippet: result.Secret || "Code snippet not available"
-          });
-        }
-      } catch (error) {
-        console.error(`Error parsing gitleaks result: ${error}`);
-      }
-    }
-    
-    return secrets;
-  } catch (error) {
-    console.error(`Error running gitleaks: ${error}`);
-    return [];
-  }
-}
-
-// Execute custom scan (placeholder for custom scanning logic)
-async function runCustomScan(repoPath: string, scanId: string): Promise<Secret[]> {
-  // This is a placeholder for custom scanning logic
-  // In a real implementation, you'd run your custom tool or script here
-  
-  const secrets: Secret[] = [];
-  
-  // Example: Scan for hardcoded passwords in files
-  try {
-    const command = new Deno.Command("grep", {
-      args: ["-r", "password", "--include=*.{js,ts,tsx,jsx,json,yml,yaml}", repoPath],
-      stdout: "piped",
-      stderr: "piped",
-    });
-    
-    const { stdout } = await command.output();
-    const output = new TextDecoder().decode(stdout);
-    
-    const lines = output.trim().split("\n");
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      
-      const [filePath, ...contentParts] = line.split(":");
-      const content = contentParts.join(":");
-      
-      // Simple rule to detect potential password
-      if (content.match(/password.*=.*["'].*["']/i)) {
-        secrets.push({
-          id: generateId(),
-          scanId,
-          filePath: filePath.replace(repoPath + "/", ""),
-          lineNumber: 0, // In a real implementation, you'd extract the line number
-          secretType: "custom: Potential hardcoded password",
-          severity: "medium",
-          description: "Custom scan found a potential hardcoded password",
-          codeSnippet: content.trim()
-        });
-      }
-    }
-  } catch (error) {
-    console.error(`Error running custom scan: ${error}`);
-  }
-  
-  return secrets;
-}
-
-// Determine severity based on secret type
-function determineSeverity(secretType: string): SecretSeverity {
-  // High severity secrets
-  if (secretType.match(/AWS|api[_\s]?key|token|password|credential|secret|private[_\s]?key|ssh/i)) {
-    return "high";
-  }
-  
-  // Medium severity secrets
-  if (secretType.match(/auth|oauth|basic[_\s]?auth|bearer/i)) {
-    return "medium";
-  }
-  
-  // Low severity secrets
-  if (secretType.match(/config|setting|env/i)) {
-    return "low";
-  }
-  
-  // Default to info
-  return "info";
-}
-
-// Count secrets by severity
-function countSecretsBySeverity(secrets: Secret[]) {
+// Calculate summary statistics from secrets
+function calculateSummary(secrets: Secret[]) {
   const counts = {
     totalSecrets: secrets.length,
     highSeverity: 0,
@@ -262,7 +225,7 @@ function countSecretsBySeverity(secrets: Secret[]) {
     infoSeverity: 0
   };
   
-  for (const secret of secrets) {
+  secrets.forEach(secret => {
     switch (secret.severity) {
       case 'high':
         counts.highSeverity++;
@@ -277,7 +240,7 @@ function countSecretsBySeverity(secrets: Secret[]) {
         counts.infoSeverity++;
         break;
     }
-  }
+  });
   
   return counts;
 }
@@ -294,114 +257,84 @@ serve(async (req) => {
   // CORS headers
   const headers = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json"
   };
 
-  // Handle preflight requests
+  // Handle OPTIONS request for CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers });
+    return new Response(null, { headers, status: 204 });
   }
-  
+
   try {
-    // Get request data
-    const data: ScanRequest = await req.json();
-    const { repositoryUrl, scannerTypes } = data;
+    const { repositoryUrl, scannerTypes } = await req.json();
     
     if (!repositoryUrl) {
       return new Response(
         JSON.stringify({ error: "Repository URL is required" }),
-        { status: 400, headers: { ...headers, "Content-Type": "application/json" } }
+        { headers, status: 400 }
       );
     }
-    
-    // Create scan result object
-    const scanId = generateId();
-    const startTime = new Date().toISOString();
-    
-    // Clone repository
-    console.log(`Cloning repository: ${repositoryUrl}`);
-    let repoPath;
-    try {
-      repoPath = await cloneRepo(repositoryUrl);
-    } catch (error) {
+
+    if (!scannerTypes || !Array.isArray(scannerTypes) || scannerTypes.length === 0) {
       return new Response(
-        JSON.stringify({ error: `Failed to clone repository: ${error.message}` }),
-        { status: 500, headers: { ...headers, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "At least one scanner type is required" }),
+        { headers, status: 400 }
       );
     }
+
+    // Extract repository name from URL for mock data
+    const repoName = repositoryUrl.split('/').pop()?.replace('.git', '') || 'unknown';
     
-    try {
-      // Run selected scanners
-      let allSecrets: Secret[] = [];
-      
-      for (const scannerType of scannerTypes) {
-        console.log(`Running ${scannerType} scan`);
-        
-        let secrets: Secret[] = [];
-        switch (scannerType) {
-          case 'trufflehog':
-            secrets = await runTrufflehog(repoPath, scanId);
-            break;
-          case 'gitleaks':
-            secrets = await runGitleaks(repoPath, scanId);
-            break;
-          case 'custom':
-            secrets = await runCustomScan(repoPath, scanId);
-            break;
+    // Create a repository record
+    const { data: repoData, error: repoError } = await supabase
+      .from('repositories')
+      .insert([
+        { 
+          name: repoName,
+          url: repositoryUrl,
+          last_scanned_at: new Date().toISOString()
         }
-        
-        console.log(`Found ${secrets.length} secrets with ${scannerType}`);
-        allSecrets = [...allSecrets, ...secrets];
-      }
-      
-      // Clean up - remove temp directory
-      try {
-        await Deno.remove(repoPath, { recursive: true });
-      } catch (error) {
-        console.error(`Error cleaning up temp directory: ${error}`);
-      }
-      
-      // Create final scan result
-      const summary = countSecretsBySeverity(allSecrets);
-      
-      const scanResult: ScanResult = {
-        id: scanId,
-        repositoryId: repositoryUrl,
-        configId: generateId(),
-        status: 'completed',
-        startedAt: startTime,
-        completedAt: new Date().toISOString(),
-        secrets: allSecrets,
-        summary
-      };
-      
-      return new Response(
-        JSON.stringify(scanResult),
-        { headers: { ...headers, "Content-Type": "application/json" } }
-      );
-    } catch (error) {
-      console.error(`Error during scan: ${error}`);
-      
-      return new Response(
-        JSON.stringify({ error: `Scan failed: ${error.message}` }),
-        { status: 500, headers: { ...headers, "Content-Type": "application/json" } }
-      );
-    } finally {
-      // Make sure we clean up the temp directory even if there's an error
-      if (repoPath) {
-        try {
-          await Deno.remove(repoPath, { recursive: true });
-        } catch (cleanupError) {
-          console.error(`Error during cleanup: ${cleanupError}`);
-        }
-      }
+      ])
+      .select()
+      .single();
+    
+    if (repoError) {
+      console.error("Error creating repository record:", repoError);
+      // Fallback to using a random ID if DB insert fails
+      const mockScan = generateMockScan(crypto.randomUUID(), scannerTypes);
+      return new Response(JSON.stringify(mockScan), { headers });
     }
+    
+    // Generate mock scan result
+    const mockScan = generateMockScan(repoData.id, scannerTypes);
+    
+    // Store scan result in database
+    const { error: scanError } = await supabase
+      .from('scan_results')
+      .insert([
+        {
+          repository_id: repoData.id,
+          status: mockScan.status,
+          started_at: mockScan.startedAt,
+          completed_at: mockScan.completedAt,
+          secrets: mockScan.secrets,
+          summary: mockScan.summary
+        }
+      ]);
+      
+    if (scanError) {
+      console.error("Error storing scan result:", scanError);
+    }
+    
+    // Return the mock scan result
+    return new Response(JSON.stringify(mockScan), { headers });
   } catch (error) {
-    console.error(`Error processing request: ${error}`);
-    
+    console.error("Error processing request:", error);
     return new Response(
-      JSON.stringify({ error: `Internal server error: ${error.message}` }),
-      { status: 500, headers: { ...headers, "Content-Type": "application/json" } }
+      JSON.stringify({ error: "Internal Server Error" }),
+      { headers, status: 500 }
     );
   }
 });

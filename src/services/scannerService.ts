@@ -43,7 +43,7 @@ export const getRepositories = async (): Promise<Repository[]> => {
       .select('*');
       
     if (error) throw error;
-    return data || [];
+    return (data || []) as Repository[];
   } catch (error) {
     console.error('Error getting repositories:', error);
     return [];
@@ -58,13 +58,13 @@ export const getScanResults = async (repositoryId?: string): Promise<ScanResult[
       .select('*');
       
     if (repositoryId) {
-      query = query.eq('repositoryId', repositoryId);
+      query = query.eq('repository_id', repositoryId);
     }
     
     const { data, error } = await query;
     
     if (error) throw error;
-    return data || [];
+    return (data || []) as ScanResult[];
   } catch (error) {
     console.error('Error getting scan results:', error);
     return [];
@@ -81,7 +81,7 @@ export const getScanResult = async (scanId: string): Promise<ScanResult | null> 
       .single();
       
     if (error) throw error;
-    return data;
+    return data as ScanResult | null;
   } catch (error) {
     console.error('Error getting scan result:', error);
     return null;

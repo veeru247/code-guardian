@@ -9,7 +9,74 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      repositories: {
+        Row: {
+          branch: string | null
+          created_at: string
+          id: string
+          last_scanned_at: string | null
+          name: string
+          url: string
+        }
+        Insert: {
+          branch?: string | null
+          created_at?: string
+          id?: string
+          last_scanned_at?: string | null
+          name: string
+          url: string
+        }
+        Update: {
+          branch?: string | null
+          created_at?: string
+          id?: string
+          last_scanned_at?: string | null
+          name?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      scan_results: {
+        Row: {
+          completed_at: string | null
+          config_id: string | null
+          id: string
+          repository_id: string
+          secrets: Json | null
+          started_at: string
+          status: string
+          summary: Json | null
+        }
+        Insert: {
+          completed_at?: string | null
+          config_id?: string | null
+          id?: string
+          repository_id: string
+          secrets?: Json | null
+          started_at?: string
+          status: string
+          summary?: Json | null
+        }
+        Update: {
+          completed_at?: string | null
+          config_id?: string | null
+          id?: string
+          repository_id?: string
+          secrets?: Json | null
+          started_at?: string
+          status?: string
+          summary?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scan_results_repository_id_fkey"
+            columns: ["repository_id"]
+            isOneToOne: false
+            referencedRelation: "repositories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
