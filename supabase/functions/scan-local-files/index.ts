@@ -19,6 +19,7 @@ serve(async (req) => {
     
     // Validate input
     if (!files || !Array.isArray(files) || files.length === 0) {
+      console.error("Files are required for scanning but none provided");
       return new Response(
         JSON.stringify({ error: "Files are required for scanning" }),
         { headers: corsHeaders, status: 400 }
@@ -26,6 +27,7 @@ serve(async (req) => {
     }
 
     if (!scannerTypes || !Array.isArray(scannerTypes) || scannerTypes.length === 0) {
+      console.error("No scanner types provided");
       return new Response(
         JSON.stringify({ error: "At least one scanner type is required" }),
         { headers: corsHeaders, status: 400 }
@@ -33,6 +35,11 @@ serve(async (req) => {
     }
     
     console.log(`Processing local scan with ${files.length} files using scanners: ${scannerTypes.join(', ')}`);
+    
+    // Detailed logging of files received
+    files.forEach((file: any, index: number) => {
+      console.log(`File ${index + 1}: ${file.name}, Size: ${file.content ? file.content.length : 'unknown'} bytes, Type: ${typeof file.content}`);
+    });
     
     // Create initial scan record with pending status
     const scanId = crypto.randomUUID();
@@ -99,7 +106,10 @@ serve(async (req) => {
           lastModified: file.lastModified || new Date().toISOString()
         }));
         
-        console.log(`Processing ${repositoryFiles.length} uploaded files`);
+        console.log(`Processing ${repositoryFiles.length} uploaded files for secret scanning`);
+        repositoryFiles.forEach((file, idx) => {
+          console.log(`File ${idx + 1}: ${file.path}, Size: ${file.size} bytes, Type: ${file.type}`);
+        });
         
         // Run selected scanners
         const secrets: Secret[] = [];

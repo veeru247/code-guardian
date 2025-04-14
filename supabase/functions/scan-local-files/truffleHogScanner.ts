@@ -3,7 +3,7 @@ import { Secret, ScannerOptions } from "./types.ts";
 import { scanFileForSecrets } from "./secretPatterns.ts";
 import { truffleHogPatterns } from "./secretPatterns.ts";
 
-// TruffleHog scanner implementation
+// Improved TruffleHog scanner implementation
 export async function runTruffleHog(options: ScannerOptions): Promise<Secret[]> {
   const { scanId, repositoryUrl, files } = options;
   console.log(`Running TruffleHog scanner on ${files.length} files from: ${repositoryUrl}`);
@@ -14,22 +14,27 @@ export async function runTruffleHog(options: ScannerOptions): Promise<Secret[]> 
     // Process each file with TruffleHog patterns
     for (const file of files) {
       if (file.type === 'file' && file.content) {
+        console.log(`TruffleHog processing file: ${file.path} (content length: ${file.content.length} bytes)`);
+        
         const fileSecrets = scanFileForSecrets(file, scanId || crypto.randomUUID(), truffleHogPatterns);
         
         // Mark as TruffleHog findings
         fileSecrets.forEach(secret => {
           // Extract commit info if available
-          // In a real integration, we would get this from git history
           secret.commit = "HEAD";
-          secret.author = "Repository Owner";
+          secret.author = "File Owner";
           secret.date = new Date().toISOString();
+          
+          console.log(`TruffleHog found secret: ${secret.secretType} in ${secret.filePath}:${secret.lineNumber}`);
         });
         
         secrets.push(...fileSecrets);
+      } else {
+        console.log(`TruffleHog skipped file ${file.path}: type=${file.type}, has content=${!!file.content}`);
       }
     }
     
-    console.log(`TruffleHog scanner found ${secrets.length} secrets`);
+    console.log(`TruffleHog scanner completed. Found ${secrets.length} secrets in total.`);
     return secrets;
   } catch (error) {
     console.error("Error in TruffleHog scanner:", error);
