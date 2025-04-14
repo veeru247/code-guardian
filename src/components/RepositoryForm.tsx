@@ -48,10 +48,16 @@ export const RepositoryForm = () => {
         !trimmedUrl.includes('gitlab.com') && !trimmedUrl.includes('bitbucket.org')) {
       toast({
         title: "Warning",
-        description: "This doesn't appear to be a standard Git repository URL. Make sure it's a valid Git repository.",
+        description: "This doesn't appear to be a standard Git repository URL. Make sure it's a valid Git repository URL ending with .git",
         variant: "default",
       });
     }
+    
+    // More informative message for the user
+    toast({
+      title: "Starting Scan",
+      description: "Beginning the scan process with the real scanning tools. This may take a few minutes.",
+    });
     
     try {
       await startNewScan(trimmedUrl);
@@ -59,7 +65,7 @@ export const RepositoryForm = () => {
       console.error('Error starting scan:', error);
       toast({
         title: "Error",
-        description: "Failed to start the scan",
+        description: `Failed to start the scan: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
     }
@@ -76,6 +82,7 @@ export const RepositoryForm = () => {
         <AlertTriangle className="h-4 w-4 text-scanner-primary" />
         <AlertDescription className="text-sm text-gray-300">
           This application uses Supabase Edge Functions to run actual scanning tools (TruffleHog, Gitleaks) on the server-side.
+          Scans are performed on real repositories and can take several minutes to complete.
         </AlertDescription>
       </Alert>
       
@@ -88,7 +95,7 @@ export const RepositoryForm = () => {
             <FolderGit className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
             <Input
               id="repositoryUrl"
-              placeholder="https://github.com/username/repository"
+              placeholder="https://github.com/username/repository.git"
               value={repositoryUrl}
               onChange={(e) => setRepositoryUrl(e.target.value)}
               className="pl-10 bg-scanner-dark border-scanner-secondary text-white focus:border-scanner-primary"
@@ -96,6 +103,9 @@ export const RepositoryForm = () => {
               required
             />
           </div>
+          <p className="text-xs text-gray-400 mt-1">
+            For best results, use the full Git URL ending with .git (e.g., https://github.com/username/repository.git)
+          </p>
         </div>
         
         <div className="space-y-2">
@@ -123,7 +133,7 @@ export const RepositoryForm = () => {
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            These tools will be executed on the server-side using Supabase Edge Functions.
+            Select at least one scanner tool. Each tool uses different techniques to identify potential secrets.
           </p>
         </div>
         

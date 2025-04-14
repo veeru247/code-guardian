@@ -18,7 +18,7 @@ export const ScanProgress = () => {
       </div>
       
       <p className="text-sm text-gray-400 mb-4">
-        Please wait while we scan the repository for secrets and sensitive information...
+        Please wait while we scan the repository. This process uses real scanning tools (TruffleHog and Gitleaks) and may take several minutes depending on the repository size...
       </p>
       
       <div className="relative">
@@ -34,16 +34,16 @@ export const ScanProgress = () => {
       
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div className="bg-scanner-bg/50 p-3 rounded">
-          <p className="text-xs text-gray-400">Finding secrets</p>
+          <p className="text-xs text-gray-400">Cloning repository</p>
         </div>
         <div className="bg-scanner-bg/50 p-3 rounded">
-          <p className="text-xs text-gray-400">Analyzing potential leaks</p>
+          <p className="text-xs text-gray-400">Running TruffleHog scanner</p>
         </div>
         <div className="bg-scanner-bg/50 p-3 rounded">
-          <p className="text-xs text-gray-400">Scanning commit history</p>
+          <p className="text-xs text-gray-400">Running Gitleaks scanner</p>
         </div>
         <div className="bg-scanner-bg/50 p-3 rounded">
-          <p className="text-xs text-gray-400">Checking sensitive files</p>
+          <p className="text-xs text-gray-400">Analyzing results</p>
         </div>
       </div>
     </div>

@@ -74,31 +74,58 @@ function calculateSummary(secrets: Secret[]) {
 
 // Function to clone a git repository to a temporary directory
 async function cloneRepository(repoUrl: string): Promise<string> {
+  console.log("Starting repository clone process for:", repoUrl);
+  
   // Create a temporary directory for the repo
   const tempDir = await Deno.makeTempDir();
+  console.log("Created temporary directory:", tempDir);
   
-  // Clone the repository
-  const command = new Deno.Command("git", {
-    args: ["clone", "--depth", "1", repoUrl, tempDir],
-  });
-  
-  const output = await command.output();
-  
-  if (!output.success) {
-    const errorText = new TextDecoder().decode(output.stderr);
-    console.error("Git clone failed:", errorText);
-    throw new Error(`Failed to clone repository: ${errorText}`);
+  try {
+    // Clone the repository with depth 1 to make it faster
+    const command = new Deno.Command("git", {
+      args: ["clone", "--depth", "1", repoUrl, tempDir],
+    });
+    
+    console.log("Executing git clone command");
+    const output = await command.output();
+    
+    if (!output.success) {
+      const errorText = new TextDecoder().decode(output.stderr);
+      console.error("Git clone failed:", errorText);
+      throw new Error(`Failed to clone repository: ${errorText}`);
+    }
+    
+    console.log("Repository cloned successfully to:", tempDir);
+    return tempDir;
+  } catch (error) {
+    console.error("Exception during git clone:", error);
+    throw error;
   }
-  
-  return tempDir;
 }
 
 // Function to run TruffleHog scanner
 async function runTruffleHog(repoPath: string): Promise<Secret[]> {
+  console.log("Starting TruffleHog scan on repository:", repoPath);
   const secrets: Secret[] = [];
   
   try {
+    // Check if trufflehog is installed
+    try {
+      const versionCommand = new Deno.Command("trufflehog", {
+        args: ["--version"],
+      });
+      const versionOutput = await versionCommand.output();
+      if (versionOutput.success) {
+        console.log("TruffleHog version:", new TextDecoder().decode(versionOutput.stdout));
+      } else {
+        console.error("TruffleHog version check failed:", new TextDecoder().decode(versionOutput.stderr));
+      }
+    } catch (err) {
+      console.error("Error checking TruffleHog version:", err);
+    }
+    
     // Run trufflehog on the cloned repository
+    console.log("Executing TruffleHog command");
     const command = new Deno.Command("trufflehog", {
       args: ["filesystem", "--directory", repoPath, "--json"],
     });
@@ -111,9 +138,12 @@ async function runTruffleHog(repoPath: string): Promise<Secret[]> {
     }
     
     const stdout = new TextDecoder().decode(output.stdout);
+    console.log("TruffleHog raw output:", stdout.substring(0, 200) + (stdout.length > 200 ? "..." : ""));
     
     // Process each line of output as a separate JSON object
     const lines = stdout.trim().split("\n");
+    console.log(`TruffleHog found ${lines.length} potential secrets`);
+    
     for (const line of lines) {
       if (!line.trim()) continue;
       
@@ -135,9 +165,11 @@ async function runTruffleHog(repoPath: string): Promise<Secret[]> {
           date: result.source.timestamp || ""
         });
       } catch (err) {
-        console.error("Error parsing TruffleHog output:", err);
+        console.error("Error parsing TruffleHog output:", err, "Line:", line);
       }
     }
+    
+    console.log(`Successfully processed ${secrets.length} secrets from TruffleHog`);
   } catch (error) {
     console.error("Error running TruffleHog:", error);
   }
@@ -147,10 +179,27 @@ async function runTruffleHog(repoPath: string): Promise<Secret[]> {
 
 // Function to run Gitleaks scanner
 async function runGitleaks(repoPath: string): Promise<Secret[]> {
+  console.log("Starting Gitleaks scan on repository:", repoPath);
   const secrets: Secret[] = [];
   
   try {
+    // Check if gitleaks is installed
+    try {
+      const versionCommand = new Deno.Command("gitleaks", {
+        args: ["version"],
+      });
+      const versionOutput = await versionCommand.output();
+      if (versionOutput.success) {
+        console.log("Gitleaks version:", new TextDecoder().decode(versionOutput.stdout));
+      } else {
+        console.error("Gitleaks version check failed:", new TextDecoder().decode(versionOutput.stderr));
+      }
+    } catch (err) {
+      console.error("Error checking Gitleaks version:", err);
+    }
+    
     // Run gitleaks on the cloned repository
+    console.log("Executing Gitleaks command");
     const command = new Deno.Command("gitleaks", {
       args: ["detect", "--source", repoPath, "--report-format", "json", "--no-git"],
     });
@@ -163,9 +212,12 @@ async function runGitleaks(repoPath: string): Promise<Secret[]> {
     }
     
     const stdout = new TextDecoder().decode(output.stdout);
+    console.log("Gitleaks raw output:", stdout.substring(0, 200) + (stdout.length > 200 ? "..." : ""));
     
     try {
+      // Gitleaks outputs a single JSON array, unlike TruffleHog which outputs one JSON object per line
       const results = JSON.parse(stdout);
+      console.log(`Gitleaks found ${results.length} potential secrets`);
       
       for (const result of results) {
         // Map Gitleaks result to our Secret format
@@ -183,6 +235,8 @@ async function runGitleaks(repoPath: string): Promise<Secret[]> {
           date: result.date || ""
         });
       }
+      
+      console.log(`Successfully processed ${secrets.length} secrets from Gitleaks`);
     } catch (err) {
       console.error("Error parsing Gitleaks output:", err);
     }
@@ -230,7 +284,7 @@ serve(async (req) => {
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, apikey",
     "Content-Type": "application/json"
   };
 
@@ -240,6 +294,7 @@ serve(async (req) => {
   }
 
   try {
+    console.log("Received scan request");
     const { repositoryUrl, scannerTypes } = await req.json();
     
     if (!repositoryUrl) {
@@ -256,6 +311,8 @@ serve(async (req) => {
       );
     }
 
+    console.log(`Processing scan for repo: ${repositoryUrl} with scanners: ${scannerTypes.join(', ')}`);
+    
     // Extract repository name from URL
     const repoName = repositoryUrl.split('/').pop()?.replace('.git', '') || 'unknown-repo';
     
@@ -273,7 +330,7 @@ serve(async (req) => {
     if (repoError) {
       console.error("Error creating repository record:", repoError);
       return new Response(
-        JSON.stringify({ error: "Failed to create repository record" }),
+        JSON.stringify({ error: "Failed to create repository record", details: repoError }),
         { headers, status: 500 }
       );
     }
@@ -300,10 +357,12 @@ serve(async (req) => {
     if (initialScanError) {
       console.error("Error creating initial scan record:", initialScanError);
       return new Response(
-        JSON.stringify({ error: "Failed to create scan record" }),
+        JSON.stringify({ error: "Failed to create scan record", details: initialScanError }),
         { headers, status: 500 }
       );
     }
+    
+    console.log(`Created scan record with ID: ${scanId}`);
     
     // Clone the repository asynchronously
     let repoPath: string;
@@ -330,7 +389,10 @@ serve(async (req) => {
         .eq('id', scanId);
       
       return new Response(
-        JSON.stringify({ error: "Failed to clone repository" }),
+        JSON.stringify({ 
+          error: "Failed to clone repository", 
+          details: error instanceof Error ? error.message : String(error) 
+        }),
         { headers, status: 500 }
       );
     }
@@ -363,6 +425,7 @@ serve(async (req) => {
       
       // Calculate summary
       const summary = calculateSummary(secrets);
+      console.log("Scan summary:", JSON.stringify(summary));
       
       // Update scan with results
       await supabase
@@ -375,9 +438,12 @@ serve(async (req) => {
         })
         .eq('id', scanId);
       
+      console.log("Scan results updated in database");
+      
       // Clean up - remove temporary directory
       try {
         await Deno.remove(repoPath, { recursive: true });
+        console.log("Temporary directory cleaned up");
       } catch (cleanupError) {
         console.error("Error cleaning up repository:", cleanupError);
       }
@@ -392,11 +458,12 @@ serve(async (req) => {
       if (scanError) {
         console.error("Error retrieving scan result:", scanError);
         return new Response(
-          JSON.stringify({ error: "Failed to retrieve scan result" }),
+          JSON.stringify({ error: "Failed to retrieve scan result", details: scanError }),
           { headers, status: 500 }
         );
       }
       
+      console.log("Scan completed successfully");
       // Return the scan result
       return new Response(JSON.stringify(scanData), { headers });
     } catch (error) {
@@ -419,14 +486,20 @@ serve(async (req) => {
       }
       
       return new Response(
-        JSON.stringify({ error: "Error during scanning" }),
+        JSON.stringify({ 
+          error: "Error during scanning", 
+          details: error instanceof Error ? error.message : String(error) 
+        }),
         { headers, status: 500 }
       );
     }
   } catch (error) {
     console.error("Error processing request:", error);
     return new Response(
-      JSON.stringify({ error: "Internal Server Error" }),
+      JSON.stringify({ 
+        error: "Internal Server Error", 
+        details: error instanceof Error ? error.message : String(error) 
+      }),
       { headers, status: 500 }
     );
   }
