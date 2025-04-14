@@ -4,8 +4,9 @@ import { useScanner } from '@/context/ScannerContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScannerType } from '@/types';
-import { Check, FolderGit, Play, Shield } from 'lucide-react';
+import { Check, FolderGit, Play, Shield, AlertTriangle } from 'lucide-react';
 import { toast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export const RepositoryForm = () => {
   const [repositoryUrl, setRepositoryUrl] = useState('');
@@ -48,7 +49,6 @@ export const RepositoryForm = () => {
       toast({
         title: "Warning",
         description: "This doesn't appear to be a standard Git repository URL. Make sure it's a valid Git repository.",
-        // Change "warning" to "default" to fix the type error
         variant: "default",
       });
     }
@@ -71,6 +71,13 @@ export const RepositoryForm = () => {
         <h2 className="text-2xl font-semibold text-white mb-2">Scan a Git Repository</h2>
         <p className="text-gray-400">Enter the URL of a Git repository to scan for secrets and sensitive information.</p>
       </div>
+      
+      <Alert className="mb-4 border-scanner-primary bg-scanner-primary/10">
+        <AlertTriangle className="h-4 w-4 text-scanner-primary" />
+        <AlertDescription className="text-sm text-gray-300">
+          This application uses Supabase Edge Functions to run actual scanning tools (TruffleHog, Gitleaks) on the server-side.
+        </AlertDescription>
+      </Alert>
       
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex flex-col">
@@ -116,7 +123,7 @@ export const RepositoryForm = () => {
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            Note: You must have {scannerTypes.join(', ')} installed on your system for scanning to work.
+            These tools will be executed on the server-side using Supabase Edge Functions.
           </p>
         </div>
         
@@ -132,4 +139,3 @@ export const RepositoryForm = () => {
     </div>
   );
 };
-

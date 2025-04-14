@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
   Repository, 
@@ -101,7 +100,6 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // Validate URL format
     try {
       new URL(repositoryUrl);
     } catch (e) {
@@ -116,40 +114,37 @@ export const ScannerProvider = ({ children }: { children: ReactNode }) => {
     setIsScanning(true);
     setScanProgress(0);
 
-    // Simulate scanning progress
     const interval = setInterval(() => {
       setScanProgress(prev => {
-        const newProgress = prev + Math.floor(Math.random() * 10);
+        const newProgress = prev + Math.floor(Math.random() * 5);
         return newProgress >= 95 ? 95 : newProgress;
       });
-    }, 500);
+    }, 1000);
 
     try {
-      // Perform the simulated scan
       const scanResult = await scannerService.scanRepository(repositoryUrl, selectedScannerTypes);
       
-      // Ensure we get to 100% in UI before completing
+      clearInterval(interval);
+      setScanProgress(100);
+      setCurrentScan(scanResult);
+      setScanResults(prev => [scanResult, ...prev]);
+      
+      toast({
+        title: "Scan Completed",
+        description: `Found ${scanResult.summary.totalSecrets} secrets in the repository`,
+      });
+      
       setTimeout(() => {
-        clearInterval(interval);
-        setScanProgress(100);
-        setCurrentScan(scanResult);
-        setScanResults(prev => [scanResult, ...prev]);
-        
-        setTimeout(() => {
-          setIsScanning(false);
-          toast({
-            title: "Scan Completed",
-            description: `Found ${scanResult.summary.totalSecrets} secrets in the repository`,
-          });
-        }, 500);
-      }, 1000);
+        setIsScanning(false);
+      }, 500);
     } catch (error) {
       clearInterval(interval);
       setIsScanning(false);
       console.error('Failed to start scan:', error);
+      
       toast({
         title: "Scan Failed",
-        description: "There was an error scanning the repository",
+        description: error instanceof Error ? error.message : "There was an error scanning the repository",
         variant: "destructive",
       });
     }
