@@ -8,10 +8,19 @@ import {
 } from '@/types';
 import { createClient } from '@supabase/supabase-js';
 
-// Create Supabase client
+// Get Supabase credentials
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Check if Supabase credentials are available
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Supabase URL and Anon Key are required. Please make sure you have set the environment variables VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+}
+
+// Create Supabase client only if credentials are available
+const supabase = supabaseUrl && supabaseAnonKey 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 // Run repository scan using Supabase Edge Function
 export const scanRepository = async (
@@ -19,6 +28,11 @@ export const scanRepository = async (
   scannerTypes: ScannerType[]
 ): Promise<ScanResult> => {
   console.log(`Scanning repository: ${repositoryUrl} with scanners: ${scannerTypes.join(', ')}`);
+  
+  // Check if Supabase client is available
+  if (!supabase) {
+    throw new Error('Supabase client is not initialized. Please make sure you have set the environment variables VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+  }
   
   try {
     const { data, error } = await supabase.functions.invoke('scan-repository', {
@@ -42,6 +56,12 @@ export const scanRepository = async (
 
 // Get information about repositories that have been scanned
 export const getRepositories = async (): Promise<Repository[]> => {
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.error('Supabase client is not initialized. Using mock data instead.');
+    return [];
+  }
+  
   try {
     const { data, error } = await supabase
       .from('repositories')
@@ -57,6 +77,12 @@ export const getRepositories = async (): Promise<Repository[]> => {
 
 // Get all scan results
 export const getScanResults = async (repositoryId?: string): Promise<ScanResult[]> => {
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.error('Supabase client is not initialized. Using mock data instead.');
+    return [];
+  }
+  
   try {
     let query = supabase
       .from('scan_results')
@@ -78,6 +104,12 @@ export const getScanResults = async (repositoryId?: string): Promise<ScanResult[
 
 // Get a specific scan result by ID
 export const getScanResult = async (scanId: string): Promise<ScanResult | null> => {
+  // Check if Supabase client is available
+  if (!supabase) {
+    console.error('Supabase client is not initialized. Using mock data instead.');
+    return null;
+  }
+  
   try {
     const { data, error } = await supabase
       .from('scan_results')
