@@ -38,7 +38,10 @@ serve(async (req) => {
     
     // Detailed logging of files received
     files.forEach((file: any, index: number) => {
-      console.log(`File ${index + 1}: ${file.name}, Size: ${file.content ? file.content.length : 'unknown'} bytes, Type: ${typeof file.content}`);
+      const fileSize = file.content ? file.content.length : 'unknown';
+      const filePreview = file.content ? file.content.substring(0, 50).replace(/\n/g, ' ') + '...' : 'No content';
+      console.log(`File ${index + 1}: ${file.name}, Size: ${fileSize} bytes, Type: ${typeof file.content}`);
+      console.log(`Content preview: ${filePreview}`);
     });
     
     // Create initial scan record with pending status
@@ -109,6 +112,9 @@ serve(async (req) => {
         console.log(`Processing ${repositoryFiles.length} uploaded files for secret scanning`);
         repositoryFiles.forEach((file, idx) => {
           console.log(`File ${idx + 1}: ${file.path}, Size: ${file.size} bytes, Type: ${file.type}`);
+          // Log a small preview of the content (first 50 chars)
+          const contentPreview = file.content.substring(0, 50).replace(/\n/g, ' ');
+          console.log(`Content preview: ${contentPreview}...`);
         });
         
         // Run selected scanners

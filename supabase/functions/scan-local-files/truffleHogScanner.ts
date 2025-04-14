@@ -16,19 +16,34 @@ export async function runTruffleHog(options: ScannerOptions): Promise<Secret[]> 
       if (file.type === 'file' && file.content) {
         console.log(`TruffleHog processing file: ${file.path} (content length: ${file.content.length} bytes)`);
         
+        // Log a small preview of the content (first 100 chars) for debugging
+        const contentPreview = file.content.substring(0, 100).replace(/\n/g, ' ');
+        console.log(`Content preview: ${contentPreview}...`);
+        
         const fileSecrets = scanFileForSecrets(file, scanId || crypto.randomUUID(), truffleHogPatterns);
         
-        // Mark as TruffleHog findings
-        fileSecrets.forEach(secret => {
-          // Extract commit info if available
-          secret.commit = "HEAD";
-          secret.author = "File Owner";
-          secret.date = new Date().toISOString();
+        if (fileSecrets.length > 0) {
+          console.log(`Found ${fileSecrets.length} secrets in ${file.path}!`);
           
-          console.log(`TruffleHog found secret: ${secret.secretType} in ${secret.filePath}:${secret.lineNumber}`);
-        });
-        
-        secrets.push(...fileSecrets);
+          // Mark as TruffleHog findings
+          fileSecrets.forEach(secret => {
+            // Extract commit info if available
+            secret.commit = "HEAD";
+            secret.author = "File Owner";
+            secret.date = new Date().toISOString();
+            
+            // Get context for the secret (the line containing it)
+            const lines = file.content.split('\n');
+            const lineContent = lines[secret.lineNumber - 1] || '';
+            
+            console.log(`TruffleHog found secret: ${secret.secretType} in ${file.path}:${secret.lineNumber}`);
+            console.log(`Line content: ${lineContent.substring(0, 50)}...`);
+          });
+          
+          secrets.push(...fileSecrets);
+        } else {
+          console.log(`No secrets found in ${file.path}`);
+        }
       } else {
         console.log(`TruffleHog skipped file ${file.path}: type=${file.type}, has content=${!!file.content}`);
       }
